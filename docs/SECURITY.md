@@ -25,7 +25,7 @@ Anonymous POST endpoints aren't subject to Magento's form-key CSRF check. Mitiga
 
 ## 6. Data minimization / PII
 - No email, name, or raw IP stored. If UA/IP is used transiently for bot filtering (§4), don't persist it — or hash+truncate if a persisted signal is genuinely needed.
-- `referrer` (used for organic/referral classification, docs/SPECS.md §2) is truncated to **hostname only** before storage — never the full URL. A full referrer URL can carry a search query, an internal tracking token, or other sensitive path/query data that isn't ours to keep; the hostname alone is all classification needs.
+- `referrer` (used for organic/referral classification, docs/SPECS.md §2) is truncated to **hostname only** before storage — never the full URL. This applies to `ads_analytics_request_log.referrer_host` as well, which is populated from `TrafficResolver::extractHost()` for exactly this reason. Note the contrast with `page_url` on that same table, which DOES keep its query string: the store's own URL is the store's to log, another site's is not. A full referrer URL can carry a search query, an internal tracking token, or other sensitive path/query data that isn't ours to keep; the hostname alone is all classification needs.
 - `ads_analytics_visit.customer_id` is the only PII-adjacent link, and only after a real order ties the anonymous visit to an account — consistent with CLAUDE.md's "no PII beyond what's already on the order" rule.
 
 ## 7. Consent

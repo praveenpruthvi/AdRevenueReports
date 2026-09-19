@@ -227,7 +227,16 @@ class TrafficResolver
         return null;
     }
 
-    private function extractHost(?string $referrer): ?string
+    /**
+     * Public so RequestLogWriter can record the same hostname this class
+     * classified on. Sharing one implementation is the point: if the log
+     * parsed the referrer separately the two could disagree, and the log
+     * would then be evidence for a decision that was never made.
+     *
+     * @param string|null $referrer full document.referrer as sent by the client
+     * @return string|null lowercased hostname, or null if there is not one
+     */
+    public function extractHost(?string $referrer): ?string
     {
         if (empty($referrer)) {
             return null;

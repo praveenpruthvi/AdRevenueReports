@@ -186,6 +186,24 @@
             Null for non-landing events, which are never classified.
         -->
         <column xsi:type="varchar" name="traffic_type" nullable="true" length="16" comment="Resolved Traffic Type (landing events only)"/>
+        <!--
+            Where the visitor came FROM, which is the question the log exists
+            to answer. page_url beside it records where they landed; without
+            this column an organic or referral arrival with a clean URL is
+            indistinguishable on screen from a direct one.
+
+            HOSTNAME ONLY, never the full referring URL — docs/SECURITY.md
+            section 6. A full referrer can carry another site's search query
+            or tracking token, which is not ours to keep; the hostname is
+            both all the classifier uses and all a merchant needs in order to
+            see the source. Note this is deliberately stricter than the
+            page_url column above, which does keep its query string: that URL
+            is the store's own.
+
+            Populated from TrafficResolver::extractHost(), the same call the
+            classification itself used, so the two can never disagree.
+        -->
+        <column xsi:type="varchar" name="referrer_host" nullable="true" length="255" comment="Referring Hostname (never the full URL, see docs/SECURITY.md)"/>
         <column xsi:type="varchar" name="queue_message_id" nullable="true" length="64" comment="Queue Message ID (set once enqueued)"/>
         <constraint xsi:type="primary" referenceId="PRIMARY">
             <column name="log_id"/>

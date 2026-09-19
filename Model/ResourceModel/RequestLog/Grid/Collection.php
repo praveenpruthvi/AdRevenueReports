@@ -25,8 +25,15 @@ use Psr\Log\LoggerInterface;
  */
 class Collection extends SearchResult implements SearchResultInterface
 {
-    /** The only column filtered as a regular expression. */
-    private const REGEX_FILTER_FIELD = 'page_url';
+    /**
+     * Columns filtered as a regular expression rather than with a LIKE.
+     *
+     * Both describe a URL, and both are searched with the same kinds of
+     * question — "any click-id style parameter", "a referring host outside
+     * the set we know about". Every other column keeps literal LIKE
+     * behaviour.
+     */
+    private const REGEX_FILTER_FIELDS = ['page_url', 'referrer_host'];
 
 
     public function __construct(
@@ -41,26 +48,27 @@ class Collection extends SearchResult implements SearchResultInterface
     }
 
     /**
-     * Filters page_url with MySQL REGEXP instead of LIKE.
+     * Filters the URL columns with MySQL REGEXP instead of LIKE.
      *
-     * The point of this column is finding traffic the module does not handle,
-     * and that means asking questions LIKE cannot express — "any utm_source
-     * that is not one of the ones we know", "a click-id parameter ending in
-     * clid that is not gclid or fbclid", "utm_campaign with a trailing
-     * space". A single substring match cannot do it.
+     * The point of those columns is finding traffic the module does not
+     * handle, and that means asking questions LIKE cannot express — "any
+     * utm_source that is not one of the ones we know", "a click-id parameter
+     * ending in clid that is not gclid or fbclid", "a referring host that is
+     * not one of our known partners". A single substring match cannot do
+     * it.
      *
      * A plain keyword still behaves as you would expect, because a regex with
      * no metacharacters is a substring match: typing `gclid` finds every URL
      * containing it. So this costs the ordinary case nothing.
      *
-     * Only page_url is treated this way. Every other column keeps stock LIKE
-     * behaviour, so a visitor uuid or a rejection reason containing a
-     * character that happens to be a regex metacharacter still matches
-     * literally.
+     * Only the columns in REGEX_FILTER_FIELDS are treated this way. Every
+     * other column keeps stock LIKE behaviour, so a visitor uuid or a
+     * rejection reason containing a character that happens to be a regex
+     * metacharacter still matches literally.
      */
     public function addFieldToFilter($field, $condition = null)
     {
-        if ($field !== self::REGEX_FILTER_FIELD) {
+        if (!is_string($field) || !in_array($field, self::REGEX_FILTER_FIELDS, true)) {
             return parent::addFieldToFilter($field, $condition);
         }
 
@@ -72,7 +80,7 @@ class Collection extends SearchResult implements SearchResultInterface
 
         if ($this->isValidRegex($pattern)) {
             $this->getSelect()->where(
-                $this->getConnection()->quoteIdentifier(self::REGEX_FILTER_FIELD) . ' REGEXP ?',
+                $this->getConnection()->quoteIdentifier($field) . ' REGEXP ?',
                 $pattern
             );
 

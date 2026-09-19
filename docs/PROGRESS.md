@@ -30,6 +30,17 @@ _(none — the checkout-type decision was resolved 2026-09-19; see CLAUDE.md §R
   - Reconciled rate-limit placement across SECURITY §4, TASKS P1-T9 and `EventIngestInterface`'s docblock (webapi layer, not the consumer); dropped the `platform_code` validation rule from SECURITY §2 since the value is always discarded and recomputed; corrected P1-T9b's false claim that tables are skipped without a schema whitelist.
 - Two earlier audit rounds against the scaffold found and fixed: a nullable-column unique-key bug in `ads_analytics_daily_summary` (silent duplicate rows), a sync-write contradiction between request logging and the async-only rule (resolved — `EventIngestService` is now publish-only, `EventConsumer` owns all DB writes including the request log), missing PHPDoc on webapi-facing interfaces, Instagram `platform_code` instability, and several `TrafficResolver` correctness bugs (case sensitivity, substring-vs-suffix search-engine matching, dropped UTM tagging, dropped campaign).
 
+### Request log now shows where visitors CAME FROM (2026-09-19)
+The log recorded the URL a visitor landed on but not the referrer that sent them, which left it failing at its main job. Organic and referral arrivals normally land on a perfectly clean store URL — `/men.html` with no query string at all — so on screen they were indistinguishable from a direct visit. The referrer was sitting in `raw_payload`, a hidden JSON column nobody opens.
+
+Added a `referrer_host` column, shown as **Came From** next to **Landed On** (the renamed Page URL).
+
+**Hostname only, never the full referring URL**, per docs/SECURITY.md §6. A full referrer carries another site's search query or tracking token — `https://www.google.com/search?q=running+shoes` — which is not ours to keep, and the hostname is both all the classifier uses and all a merchant needs to see the source. This is deliberately stricter than the `page_url` column beside it, which does keep its query string, and the distinction is principled rather than accidental: our own URL is ours to store, another site's is not. Verified that no row contains any part of a referring search query.
+
+The value comes from `TrafficResolver::extractHost()`, which was made public for this. Sharing the resolver's own helper rather than parsing the referrer again is the point: two implementations could drift, and the log would then be showing evidence for a decision that was never actually made.
+
+Regex filtering now covers both URL columns rather than just `page_url`; they answer the same kinds of question. Verified: `^(www\.)?google\.com$` matches google exactly without matching a lookalike domain, `^(?!.*google).*$` inverts it, `t\.co|someblog` matches a set.
+
 ### Request log no longer records direct traffic (2026-09-19)
 Direct arrivals are not what this module is for, and their rows were pure noise: the log records URLs so that a click id or utm tag the classifier does not recognise becomes visible, and a direct visit has no referrer and no campaign parameters **by definition** — its URL can never reveal a missing source.
 

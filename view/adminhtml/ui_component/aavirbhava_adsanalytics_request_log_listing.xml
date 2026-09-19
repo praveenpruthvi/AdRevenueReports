@@ -140,10 +140,30 @@
             An unparseable pattern falls back to a literal match rather than
             erroring, so a half-typed expression does not break the grid.
         -->
+        <!--
+            Where the visitor came FROM. This is the column that makes an
+            organic or referral arrival legible: those usually land on a
+            perfectly clean store URL, so without the referring host beside
+            it such a row looks identical to a direct visit and the log fails
+            at the one job it has.
+
+            Hostname only, never the full referring URL (docs/SECURITY.md
+            §6). Empty for a direct arrival, and for non-landing events,
+            which do not send a referrer.
+
+            Filtered by regex, like Page URL.
+        -->
+        <column name="referrer_host" sortOrder="53">
+            <settings>
+                <filter>text</filter>
+                <label translate="true">Came From (regex filter)</label>
+            </settings>
+        </column>
+
         <column name="page_url" sortOrder="55">
             <settings>
                 <filter>text</filter>
-                <label translate="true">Page URL (regex filter)</label>
+                <label translate="true">Landed On (regex filter)</label>
             </settings>
         </column>
 

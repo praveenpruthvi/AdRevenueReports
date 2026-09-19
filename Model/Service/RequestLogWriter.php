@@ -34,12 +34,16 @@ class RequestLogWriter
     
     /** Matches ads_analytics_request_log.page_url width (etc/db_schema.xml). */
     private const MAX_PAGE_URL_LENGTH = 2048;
+
+    /** Matches ads_analytics_request_log.referrer_host width. */
+    private const MAX_REFERRER_HOST_LENGTH = 255;
     private const MAX_REJECTION_REASON = 255;
 
     private RequestLogFactory $requestLogFactory;
     private RequestLogResource $requestLogResource;
     private RequestLogConfig $config;
     private Json $json;
+    private TrafficResolver $trafficResolver;
     private LoggerInterface $logger;
 
     public function __construct(
@@ -47,12 +51,14 @@ class RequestLogWriter
         RequestLogResource $requestLogResource,
         RequestLogConfig $config,
         Json $json,
+        TrafficResolver $trafficResolver,
         LoggerInterface $logger
     ) {
         $this->requestLogFactory = $requestLogFactory;
         $this->requestLogResource = $requestLogResource;
         $this->config = $config;
         $this->json = $json;
+        $this->trafficResolver = $trafficResolver;
         $this->logger = $logger;
     }
 
@@ -75,6 +81,14 @@ class RequestLogWriter
                 'ip_hash' => $event->getIpHash(),
                 'user_agent' => $event->getUserAgent(),
                 'page_url' => $this->truncate($event->getPageUrl(), self::MAX_PAGE_URL_LENGTH),
+                // Hostname only, never the full referring URL
+                // (docs/SECURITY.md §6). Taken from the resolver's own
+                // helper so the recorded host is exactly the one
+                // classification was based on.
+                'referrer_host' => $this->truncate(
+                    $this->trafficResolver->extractHost($event->getReferrer()),
+                    self::MAX_REFERRER_HOST_LENGTH
+                ),
             ]);
             $this->requestLogResource->save($log);
 
