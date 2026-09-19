@@ -26,7 +26,7 @@ class Index extends Action implements HttpGetActionInterface
     public function execute(): ResultInterface
     {
         $resultPage = $this->resultFactory->create(ResultFactory::TYPE_PAGE);
-        $resultPage->setActiveMenu('Aavirbhava_AdsAnalytics::dashboard');
+        $resultPage->setActiveMenu('Aavirbhava_AdsAnalytics::report_dashboard');
         $resultPage->getConfig()->getTitle()->prepend(__('Ads Analytics'));
 
         // TODO(P3-T3): layout handle ads_analytics_report_index.xml renders

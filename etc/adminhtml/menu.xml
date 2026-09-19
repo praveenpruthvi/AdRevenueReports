@@ -32,7 +32,21 @@
              parent="Magento_Reports::report"
              resource="Aavirbhava_AdsAnalytics::report"/>
 
-        <add id="Aavirbhava_AdsAnalytics::dashboard"
+        <!--
+            The menu id must NOT end in "::dashboard".
+
+            Magento\Backend\Block\Menu derives each item's CSS class from the
+            part of the id after "::" (`item-` . strtolower($itemName)), and
+            core's _menu.less styles `.item-dashboard > a:before` with an
+            Admin Icons glyph for the main sidebar Dashboard entry. An id of
+            Aavirbhava_AdsAnalytics::dashboard therefore inherited that rule
+            and rendered a stray icon before the label in the Reports
+            mega-menu, where the icon font is not applied and the glyph came
+            out as an empty box. The id below yields `item-report-dashboard`,
+            which matches no core rule. The ACL resource is deliberately left
+            as ...::dashboard, so no role permissions change.
+        -->
+        <add id="Aavirbhava_AdsAnalytics::report_dashboard"
              title="Dashboard"
              translate="title"
              module="Aavirbhava_AdsAnalytics"
