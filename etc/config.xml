@@ -87,14 +87,25 @@
             </rate_limit>
             <logging>
                 <!--
-                    rejected_only, not 'all': the request log stores raw
-                    unvalidated payloads (docs/SPECS.md §9), so logging every
-                    accepted request on a live store is a large volume of
-                    attacker-controllable text for little debugging value.
-                    Rejections are the rows worth having by default. Flip to
-                    'all' temporarily when diagnosing a specific problem.
+                    external_only. The request log exists to show traffic the
+                    module did not classify well, and that question can only
+                    be asked of a request that came from somewhere else: a
+                    direct arrival has no referrer and no campaign parameters
+                    by definition, so its URL can never reveal a missing
+                    source. Internal funnel events are excluded for the same
+                    reason — their URL is the store's own page reached from
+                    the store's own pages.
+
+                    Not 'all', because this table stores raw unvalidated
+                    payloads and full query strings (docs/SPECS.md §9), so
+                    logging every request on a live store accumulates a large
+                    volume of attacker-controllable text for little
+                    additional insight. Switch to 'all' temporarily when
+                    debugging the funnel itself rather than acquisition, and
+                    to 'rejected_only' if even externally-referred landings
+                    are more volume than the store wants.
                 -->
-                <logging_level>rejected_only</logging_level>
+                <logging_level>external_only</logging_level>
                 <!--
                     14 days, per docs/SECURITY.md §8 — deliberately much
                     shorter than event_retention_days below, because this

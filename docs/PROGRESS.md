@@ -30,6 +30,22 @@ _(none — the checkout-type decision was resolved 2026-09-19; see CLAUDE.md §R
   - Reconciled rate-limit placement across SECURITY §4, TASKS P1-T9 and `EventIngestInterface`'s docblock (webapi layer, not the consumer); dropped the `platform_code` validation rule from SECURITY §2 since the value is always discarded and recomputed; corrected P1-T9b's false claim that tables are skipped without a schema whitelist.
 - Two earlier audit rounds against the scaffold found and fixed: a nullable-column unique-key bug in `ads_analytics_daily_summary` (silent duplicate rows), a sync-write contradiction between request logging and the async-only rule (resolved — `EventIngestService` is now publish-only, `EventConsumer` owns all DB writes including the request log), missing PHPDoc on webapi-facing interfaces, Instagram `platform_code` instability, and several `TrafficResolver` correctness bugs (case sensitivity, substring-vs-suffix search-engine matching, dropped UTM tagging, dropped campaign).
 
+### Request log no longer records direct traffic (2026-09-19)
+Direct arrivals are not what this module is for, and their rows were pure noise: the log records URLs so that a click id or utm tag the classifier does not recognise becomes visible, and a direct visit has no referrer and no campaign parameters **by definition** — its URL can never reveal a missing source.
+
+Added a third logging level, `external_only`, now the shipped default: rejections, plus accepted **landings** that resolved to `paid`, `organic` or `referral`. Dropped are direct landings and all non-landing funnel events, the latter because their URL is the store's own page reached from the store's own pages.
+
+Two properties worth keeping:
+
+- **Rejections are logged regardless of origin.** A malformed request from a direct visit is still a malformed request, and debugging is the log's other job. Verified: a bad `event_type` posted from a plain `https://magento.test/` URL is still recorded with its reason.
+- **Dropping a log row does not drop analytics.** The filter applies only to `ads_analytics_request_log`. Verified: the direct landing still created its `ads_analytics_visit` row with `traffic_type = direct`, and the internal `product_view` still created its funnel row. Visits, funnel events, attribution and the daily summary are untouched.
+
+The row is still written optimistically before validation and deleted once the outcome and traffic type are known, which is the same mechanism `rejected_only` already used. Writing only after classification would lose the row for any event that crashes the consumer mid-validation, which is precisely the case the log exists for.
+
+**Verified** with seven landings at `external_only`: paid, paid, organic and referral kept; direct and the internal product view dropped; the rejected event kept with its reason despite its URL being direct. 146 unit tests green, including a new `RequestLogConfigTest` pinning what each level keeps.
+
+One test-only trap worth remembering: stubbing `getValue()` twice on a single shared `ScopeConfigInterface` mock silently keeps the FIRST configured return, so a test that builds configs at two levels asserts against the wrong one. The helper now creates a fresh mock per call.
+
 ### Request log now records the real URL, with regex filtering (2026-09-19)
 The request log recorded `endpoint`, which is always `/V1/adsanalytics/event`, and the payload fields the module had already parsed. That made it useless for its most valuable purpose: seeing traffic the module does **not** handle. An unrecognised click-id or utm parameter appears nowhere — `TrafficResolver` keeps only what it understands, and `ads_analytics_visit.landing_page` stores the path with the query string thrown away.
 

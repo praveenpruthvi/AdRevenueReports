@@ -136,7 +136,7 @@
                 <field id="logging_level" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
                     <label>Logging Level</label>
                     <source_model>Aavirbhava\AdsAnalytics\Model\Config\Source\LoggingLevel</source_model>
-                    <comment>docs/SPECS.md §9 — Off / Rejected only / All requests.</comment>
+                    <comment><![CDATA[docs/SPECS.md §9. <b>Rejected + Externally Referred</b> (default) logs invalid requests plus landings that arrived from a paid, organic or referral source — the ones whose URL can reveal a campaign parameter this module does not yet recognise. Direct arrivals and internal funnel events are not logged, because their URL carries no inbound source. Use <b>All Requests</b> temporarily when debugging the funnel itself; it stores raw payloads and full query strings for every request.]]></comment>
                 </field>
                 <field id="request_log_retention_days" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
                     <label>Request Log Retention (days)</label>

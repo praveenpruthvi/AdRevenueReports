@@ -102,11 +102,13 @@ class RequestLogWriter
             return;
         }
 
-        // At 'rejected_only' the optimistic pending row is discarded now that
-        // we know the event was fine — keeping it would make the log grow at
-        // the rate of all traffic, defeating the shorter retention window
-        // that exists because this table holds raw unvalidated payloads.
-        if (!$this->config->shouldKeepAcceptedRow()) {
+        // The optimistic pending row is discarded now that we know the event
+        // was fine and what it resolved to. At 'rejected_only' that means
+        // every accepted row; at 'external_only' only the ones that did not
+        // arrive from outside the store. Keeping them all would make the log
+        // grow at the rate of total traffic, defeating the shorter retention
+        // window that exists because this table holds raw unvalidated input.
+        if (!$this->config->shouldKeepAcceptedRow($trafficType)) {
             $this->delete($logId);
             return;
         }

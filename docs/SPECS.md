@@ -148,6 +148,8 @@ Together they make misclassification directly visible: a row whose URL carries c
 
 Both live **only on this table**. A query string is arbitrary caller-supplied text and can carry personal data such as a search term, so it stays on the debugging surface that already holds raw payloads and is purged on the short retention window (docs/SECURITY.md sections 6 and 8). It must not be copied into the visit, funnel or summary tables.
 
+**Logging levels.** `off`, `rejected_only`, `external_only` (the default) and `all`. `external_only` keeps rejections plus accepted landings whose resolved traffic type is `paid`, `organic` or `referral`; it drops direct landings and non-landing funnel events, neither of which has an inbound URL worth inspecting. Rejections are always kept whatever the origin, and the filtering applies only to this table — the visit, funnel, attribution and summary tables record every event regardless of logging level.
+
 The admin grid filters `page_url` as a **MySQL regular expression** rather than a LIKE. A plain keyword still behaves as a substring match, so the ordinary case is unchanged, but it also allows questions a LIKE cannot express — `[?&][a-z_]*clid=` for any click-id style parameter, `[?&]utm_medium=(cpc|paid)` for paid mediums, `twclid|epik|li_fat_id` for a specific set of unhandled ones. An unparseable pattern falls back to a literal match instead of erroring, because a half-typed expression is the normal state of a filter box.
 
 ## 10. Privacy/compliance notes
