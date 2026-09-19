@@ -36,6 +36,18 @@
         <index referenceId="AAVIRBHAVA_ADSANALYTICS_VISIT_TRAFFIC_TYPE" indexType="btree">
             <column name="traffic_type"/>
         </index>
+        <!--
+            Added for P3-T7. Cron\PurgeOldData deletes visits on
+            last_seen_at; without this index that nightly DELETE is a full
+            scan of the largest table in the module, which on a busy store is
+            exactly the kind of statement that wedges the cron group and
+            blocks live ingest writes behind it. ads_analytics_funnel_event
+            and ads_analytics_request_log already index the columns their own
+            purges filter on.
+        -->
+        <index referenceId="AAVIRBHAVA_ADSANALYTICS_VISIT_LAST_SEEN_AT" indexType="btree">
+            <column name="last_seen_at"/>
+        </index>
     </table>
 
     <!-- docs/SPECS.md §3 -->

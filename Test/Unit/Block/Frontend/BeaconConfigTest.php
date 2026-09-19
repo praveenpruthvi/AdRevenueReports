@@ -43,9 +43,13 @@ class BeaconConfigTest extends TestCase
         $storeManager = $this->createMock(StoreManagerInterface::class);
         $storeManager->method('getStore')->willReturn($this->store);
 
+        $urlBuilder = $this->createMock(UrlInterface::class);
+        $urlBuilder->method('getUrl')->willReturn('https://shop.example/checkout/');
+
         $context = $this->createMock(Context::class);
         $context->method('getScopeConfig')->willReturn($this->scopeConfig);
         $context->method('getStoreManager')->willReturn($storeManager);
+        $context->method('getUrlBuilder')->willReturn($urlBuilder);
         $context->method('getEscaper')->willReturn(
             (new ObjectManager($this))->getObject(\Magento\Framework\Escaper::class)
         );
@@ -162,6 +166,33 @@ class BeaconConfigTest extends TestCase
         $this->store->method('getBaseUrl')->willReturn('https://shop.example/');
 
         $this->assertFalse($this->decodedConfig()['requireCookieConsent']);
+    }
+
+    /**
+     * The beacon detects the checkout page by path, so the path it is given
+     * must be the one the store actually resolves — a store that renamed or
+     * moved its checkout must still match.
+     */
+    public function testCheckoutPathIsDerivedFromTheStoreUrl(): void
+    {
+        $this->store->method('getBaseUrl')->willReturn('https://shop.example/');
+
+        $this->assertSame('/checkout/', $this->decodedConfig()['checkoutPath']);
+    }
+
+    /**
+     * The hash -> event map lives in PHP config, not in the beacon, so no
+     * step name is hardcoded in JavaScript. LUMA has no separate review step,
+     * so only two entries are expected.
+     */
+    public function testCheckoutStepEventMapIsSupplied(): void
+    {
+        $this->store->method('getBaseUrl')->willReturn('https://shop.example/');
+
+        $this->assertSame(
+            ['shipping' => 'checkout_step_shipping', 'payment' => 'checkout_step_payment'],
+            $this->decodedConfig()['checkoutStepEvents']
+        );
     }
 
     /**

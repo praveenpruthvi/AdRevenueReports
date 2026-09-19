@@ -1,0 +1,8 @@
+/* P3-T4. A stylesheet rather than an inline <style>: keeps the markup free of
+   anything a tightened style-src CSP would object to later. */
+.aavirbhava-ads-charts { margin-bottom: 20px; }
+.aavirbhava-ads-charts__content { padding: 20px; display: flex; flex-wrap: wrap; gap: 24px; }
+.aavirbhava-ads-charts__panel { flex: 1 1 320px; min-width: 280px; height: 300px; position: relative; }
+.aavirbhava-ads-charts__title { font-weight: 600; margin: 0 0 8px; color: #303030; }
+.aavirbhava-ads-charts__empty { flex-basis: 100%; color: #6d7278; text-align: center; margin: 40px 0; }
+.aavirbhava-ads-charts__note { flex-basis: 100%; color: #6d7278; font-size: 1.2rem; margin: 0; }

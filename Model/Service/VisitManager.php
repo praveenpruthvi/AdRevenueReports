@@ -125,6 +125,21 @@ class VisitManager
         $this->funnelEventResource->save($funnelEvent);
     }
 
+    /**
+     * Flags the visit as converted. Kept separate from the attribution write
+     * so a visit is marked converted exactly once per order without the
+     * attribution row's idempotency having to care.
+     */
+    public function markConverted(Visit $visit): void
+    {
+        if ((int)$visit->getData('converted') === 1) {
+            return;
+        }
+
+        $visit->setData('converted', 1);
+        $this->visitResource->save($visit);
+    }
+
     private function loadByUuid(string $visitorUuid): Visit
     {
         $visit = $this->visitFactory->create();

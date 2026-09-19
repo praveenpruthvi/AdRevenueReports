@@ -26,6 +26,18 @@
         <arguments>
             <argument name="collections" xsi:type="array">
                 <item name="aavirbhava_adsanalytics_request_log_listing_data_source" xsi:type="string">Aavirbhava\AdsAnalytics\Model\ResourceModel\RequestLog\Grid\Collection</item>
+                <item name="aavirbhava_adsanalytics_summary_listing_data_source" xsi:type="string">Aavirbhava\AdsAnalytics\Model\ResourceModel\DailySummary\Grid\Collection</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <!-- P3-T2: on-demand rollup, so the reports can be populated and
+         backfilled without waiting for the nightly cron. -->
+    <type name="Magento\Framework\Console\CommandListInterface">
+        <arguments>
+            <argument name="commands" xsi:type="array">
+                <item name="aavirbhava_adsanalytics_aggregate" xsi:type="object">Aavirbhava\AdsAnalytics\Console\Command\AggregateSummaryCommand</item>
+                <item name="aavirbhava_adsanalytics_purge" xsi:type="object">Aavirbhava\AdsAnalytics\Console\Command\PurgeDataCommand</item>
             </argument>
         </arguments>
     </type>

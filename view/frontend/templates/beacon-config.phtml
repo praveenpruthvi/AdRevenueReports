@@ -1,28 +1,33 @@
 <?php
 /**
- * Emits the beacon's config AND its script tag together (P1-T7).
+ * Emits the beacon's configuration and loads the beacon (P1-T7).
  *
- * Both live here rather than the script being declared in layout <head>, so
- * that the kill switch is honest: BeaconConfig::_toHtml() returns '' when
- * tracking is disabled, and a disabled module then ships no config global and
- * no script download at all. With the tag in layout XML the browser still
- * fetched a JS file on every page view for a module that was switched off.
+ * THERE IS NO INLINE SCRIPT HERE, DELIBERATELY. This previously rendered
  *
- * Deliberately NOT <script type="text/x-magento-init"> — that is RequireJS,
- * which CLAUDE.md #4 forbids on the storefront so the module stays
- * Hyvä-compatible. A plain script tag works identically on both themes.
+ *     <script>window.aavirbhavaAdsAnalytics = {...};</script>
  *
- * `defer` keeps the beacon off the critical rendering path; it must never
- * delay first paint on a checkout page.
+ * which Magento's Content Security Policy BLOCKS on the checkout page:
+ * "Executing inline script violates the following Content Security Policy
+ * directive 'script-src ...' ... The action has been blocked."
  *
- * getBeaconConfigJson() returns JSON from the Json serializer, inserted as a
- * JS literal rather than HTML — hence @noEscape.
+ * The consequence was silent and very misleading: the config global never
+ * existed on checkout, so the beacon bailed out at its first guard and every
+ * checkout event vanished — while product pages (where CSP is report-only)
+ * worked perfectly. Two earlier attempts to hook LUMA's step navigator, as a
+ * jsLayout component and then as a RequireJS mixin, were almost certainly
+ * fine; they simply had no beacon to call.
+ *
+ * The config now travels as a data attribute and is read by the EXTERNAL
+ * beacon file, which CSP permits because it is a same-origin script resource
+ * rather than inline code. This works under both report-only and restrict
+ * mode, and needs no CSP whitelist entry or inline-script hash — a hash would
+ * have to be regenerated every time the config changed.
  *
  * @var \Aavirbhava\AdsAnalytics\Block\Frontend\BeaconConfig $block
  * @var \Magento\Framework\Escaper $escaper
  */
 ?>
-<script>
-    window.aavirbhavaAdsAnalytics = <?= /* @noEscape */ $block->getBeaconConfigJson() ?>;
-</script>
+<div id="aavirbhava-adsanalytics-config"
+     data-config="<?= $escaper->escapeHtmlAttr($block->getBeaconConfigJson()) ?>"
+     style="display:none"></div>
 <script defer src="<?= $escaper->escapeUrl($block->getViewFileUrl('Aavirbhava_AdsAnalytics::js/ads-analytics-beacon.js')) ?>"></script>

@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Aavirbhava\AdsAnalytics\Block\Frontend;
 
 use Aavirbhava\AdsAnalytics\Model\Config\TrafficClassificationConfig;
+use Aavirbhava\AdsAnalytics\Model\Service\VisitorCookie;
 use Magento\Cookie\Helper\Cookie as CookieHelper;
 use Magento\Framework\Serialize\Serializer\Json;
 use Magento\Framework\View\Element\Template;
@@ -33,8 +34,29 @@ class BeaconConfig extends Template
 {
     private const XML_PATH_ENABLED = 'aavirbhava_adsanalytics/general/enabled';
     private const XML_PATH_COOKIE_LIFETIME = 'aavirbhava_adsanalytics/general/cookie_lifetime_days';
+    private const XML_PATH_DEBUG_LOGGING = 'aavirbhava_adsanalytics/general/debug_logging';
 
     private const DEFAULT_COOKIE_LIFETIME_DAYS = 90;
+
+    /**
+     * LUMA checkout step code (as it appears in the URL hash) -> event type
+     * from docs/SPECS.md §6.
+     *
+     * Magento_Checkout's step-navigator drives the checkout by setting
+     * `window.location.hash` to the active step code — see its setHash() and
+     * navigateTo(). That makes step transitions observable with a plain
+     * `hashchange` listener, with no RequireJS, Knockout or jQuery, which is
+     * why CLAUDE.md #4 needs no exception for checkout after all.
+     *
+     * Default LUMA registers only `shipping` and `payment` (the latter titled
+     * "Review & Payments"), so `checkout_step_review` is never emitted on
+     * LUMA. A checkout that uses different hashes — or none — should call the
+     * beacon's public track() API directly instead; see README.md.
+     */
+    private const CHECKOUT_STEP_EVENTS = [
+        'shipping' => 'checkout_step_shipping',
+        'payment' => 'checkout_step_payment',
+    ];
 
     private TrafficClassificationConfig $classificationConfig;
     private Json $json;
@@ -79,7 +101,9 @@ class BeaconConfig extends Template
     {
         return $this->json->serialize([
             'endpoint' => $this->getIngestEndpoint(),
-            'cookieName' => 'aavirbhava_visitor_uuid',
+            // Shared constant, so the JS and the server-side observers that
+            // read this cookie back can never disagree on its name.
+            'cookieName' => VisitorCookie::NAME,
             'cookieLifetimeDays' => $this->getCookieLifetimeDays(),
             'clickIdParams' => $this->getClickIdParams(),
             // P1-T8: when Magento's own cookie-restriction mode is on, the
@@ -87,7 +111,28 @@ class BeaconConfig extends Template
             // visitor accepts. Third-party consent modules are a separate
             // integration — see docs/TASKS.md P1-T8.
             'requireCookieConsent' => $this->isCookieRestrictionModeEnabled(),
+            'checkoutPath' => $this->getCheckoutPath(),
+            'checkoutStepEvents' => self::CHECKOUT_STEP_EVENTS,
+            // Diagnostic only. The beacon can also be switched on per-session
+            // with ?adsanalytics_debug=1, so a developer never has to change
+            // store config just to watch a funnel walkthrough.
+            'debug' => $this->_scopeConfig->isSetFlag(self::XML_PATH_DEBUG_LOGGING, ScopeInterface::SCOPE_STORE),
         ]);
+    }
+
+    /**
+     * Path prefix that identifies the checkout page, so the beacon can tell
+     * it is in a checkout without any theme-specific JS.
+     */
+    private function getCheckoutPath(): string
+    {
+        return '/' . trim(
+            (string)parse_url(
+                $this->_urlBuilder->getUrl('checkout', ['_secure' => true]),
+                PHP_URL_PATH
+            ),
+            '/'
+        ) . '/';
     }
 
     /**

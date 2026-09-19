@@ -3,88 +3,31 @@ declare(strict_types=1);
 
 namespace Aavirbhava\AdsAnalytics\Block\Adminhtml;
 
-use Aavirbhava\AdsAnalytics\Model\ResourceModel\DailySummary\CollectionFactory;
 use Magento\Backend\Block\Template;
-use Magento\Backend\Block\Template\Context;
 
 /**
- * Dashboard tab data (P3-T4 groundwork).
+ * Dashboard charts above the Ads Analytics report grid (P3-T4).
  *
- * Reads ONLY from ads_analytics_daily_summary (CLAUDE.md #6) — never from the
- * raw visit/funnel tables at request time, no matter how tempting that is
- * while the aggregation cron is still unimplemented. Showing raw counts here
- * "just for now" is exactly how that constraint gets quietly broken.
+ * Holds no data of its own. The charts are drawn from the SAME Ui Component
+ * data provider the grid below them reads, so whatever the admin has filtered
+ * the grid to — date range, traffic type, campaign — is exactly what the
+ * charts show. A second server fetch here could disagree with the table on
+ * screen, which is worse than having no chart.
  *
- * TODO(P3-T4): Chart.js funnel drop-off + source/medium/campaign breakdown
- * using core's bundled copy, with the traffic_type toggle from SPECS.md §8.
- * This class currently supplies the tabular breakdown and totals the template
- * needs; the charts layer on top of the same data.
+ * Consequence, disclosed in the template: the charts describe the CURRENT
+ * PAGE of grid results, not every row matching the filters. Same limitation
+ * as Aavirbhava_SalesAnalytics' dashboard, and the same deliberate v1
+ * trade-off rather than an oversight.
  */
 class Dashboard extends Template
 {
-    private CollectionFactory $summaryCollectionFactory;
-
-    public function __construct(
-        Context $context,
-        CollectionFactory $summaryCollectionFactory,
-        array $data = []
-    ) {
-        $this->summaryCollectionFactory = $summaryCollectionFactory;
-        parent::__construct($context, $data);
-    }
-
     /**
-     * Rows grouped by traffic_type — the paid-vs-organic comparison that
-     * PROJECT_PLAN.md exists for.
-     *
-     * @return array<array<string, mixed>>
+     * Name of the Ui Component provider the charts bind to. Must match the
+     * dataSource name in
+     * view/adminhtml/ui_component/aavirbhava_adsanalytics_summary_listing.xml.
      */
-    public function getTrafficTypeBreakdown(): array
+    public function getListingProviderName(): string
     {
-        $collection = $this->summaryCollectionFactory->create();
-        $select = $collection->getSelect();
-        $select->reset(\Magento\Framework\DB\Select::COLUMNS)
-            ->columns([
-                'traffic_type' => 'traffic_type',
-                'visits' => new \Zend_Db_Expr('SUM(visits)'),
-                'add_to_carts' => new \Zend_Db_Expr('SUM(add_to_carts)'),
-                'checkout_starts' => new \Zend_Db_Expr('SUM(checkout_starts)'),
-                'orders' => new \Zend_Db_Expr('SUM(orders)'),
-                'revenue' => new \Zend_Db_Expr('SUM(revenue)'),
-            ])
-            ->group('traffic_type')
-            ->order('visits DESC');
-
-        return $collection->getConnection()->fetchAll($select);
-    }
-
-    /**
-     * NOT named hasData(): Magento\Framework\DataObject (via Template ->
-     * AbstractBlock) already defines hasData($key = ''), and overriding it
-     * with a no-argument bool signature is a fatal incompatible-declaration
-     * error at compile time.
-     */
-    public function hasSummaryData(): bool
-    {
-        return $this->summaryCollectionFactory->create()->getSize() > 0;
-    }
-
-    /**
-     * Conversion rate as a percentage of visits, guarded against the
-     * divide-by-zero that a traffic_type with zero visits would cause.
-     */
-    public function getConversionRate(array $row): string
-    {
-        $visits = (int)($row['visits'] ?? 0);
-        if ($visits === 0) {
-            return '—';
-        }
-
-        return number_format(((int)($row['orders'] ?? 0) / $visits) * 100, 2) . '%';
-    }
-
-    public function formatRevenue(array $row): string
-    {
-        return number_format((float)($row['revenue'] ?? 0), 2);
+        return 'aavirbhava_adsanalytics_summary_listing.aavirbhava_adsanalytics_summary_listing_data_source';
     }
 }

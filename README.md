@@ -37,10 +37,15 @@ built as a **shared core plus a thin per-theme adapter**:
 | Layer | File | Stack |
 |---|---|---|
 | Shared beacon (all themes) | `view/frontend/web/js/ads-analytics-beacon.js` | Vanilla JS |
-| LUMA checkout adapter | `view/frontend/web/js/checkout-luma.js` | RequireJS + Knockout |
+| LUMA checkout steps | detected in the beacon from `window.location.hash` | Vanilla JS |
 | Hyvä checkout adapter | *not shipped — see below* | Alpine.js |
 
-**Only the LUMA adapter ships.** Hyvä Checkout is a paid product, so this
+LUMA needs no adapter at all: Magento's `step-navigator` sets
+`window.location.hash` to the active step code, so the vanilla beacon detects
+steps with a `hashchange` listener. **No RequireJS, Knockout or jQuery is used
+anywhere on the storefront.**
+
+**No Hyvä adapter ships.** Hyvä Checkout is a paid product, so this
 module does not assume you have it; the seam is left open instead of shipping
 an untested implementation of a path most stores will not use.
 
@@ -84,9 +89,10 @@ No PHP class, no `di.xml` entry and no change to the beacon is required.
    track('checkout_step_review');
    ```
 
-2. **Load it only on Hyvä checkout**, the same way the LUMA adapter is scoped
-   to `checkout_index_index.xml`. Nothing else in the module needs to know it
-   exists.
+2. **Load it only on Hyvä checkout.** Nothing else in the module needs to know
+   it exists. Do NOT emit it as an inline `<script>` — Magento's CSP blocks
+   inline scripts on checkout, which is exactly how the LUMA path failed
+   during development.
 
 3. **Map Hyvä's step names to the event types above.** This is the part that
    cannot be shared, and the reason the adapter exists: default LUMA registers
@@ -103,6 +109,35 @@ No PHP class, no `di.xml` entry and no change to the beacon is required.
 Nothing server-side is theme-aware: events from either adapter go through the
 same REST endpoint, the same queue and the same `EventConsumer`, and are
 validated against the same event-type allow-list.
+
+## Cron jobs and CLI commands
+
+Two cron jobs run in the `default` group:
+
+| Job | Schedule | What it does |
+|---|---|---|
+| `aavirbhava_adsanalytics_aggregate_daily_summary` | `0 2 * * *` | Rolls raw visit/funnel/order rows into `ads_analytics_daily_summary`, re-sweeping a configurable lookback window (default 7 days) so events that arrived late through the queue are picked up. The rollup is idempotent. |
+| `aavirbhava_adsanalytics_purge_old_data` | `30 2 * * *` | Deletes raw per-visitor data and request-log rows past their retention windows. Scheduled after the aggregation job so a day is always summarised before it can be purged. |
+
+Both are also runnable by hand:
+
+```bash
+# Rebuild the summary for the last 7 days (idempotent — safe to re-run).
+bin/magento aavirbhava:adsanalytics:aggregate --days=7
+
+# Backfill a specific range.
+bin/magento aavirbhava:adsanalytics:aggregate --from=2026-01-01 --to=2026-01-31
+
+# See what a retention purge would delete, without deleting it.
+bin/magento aavirbhava:adsanalytics:purge --dry-run
+
+# Purge using the configured windows.
+bin/magento aavirbhava:adsanalytics:purge
+```
+
+**The aggregate command refuses `--from` dates older than the raw-event retention window.** Reports read from `ads_analytics_daily_summary`, which is kept indefinitely, but the raw rows behind it are not — so recomputing a purged date would replace real figures with zeros. Pass `--force` only if you understand that. Raising the retention window does not bring purged rows back.
+
+**Retention is configured per table**, under Stores > Configuration > Aavirbhava > Ads Analytics: raw events default to 180 days, and the request log to 14, because it stores raw unvalidated request payloads. Setting either to **0 disables that purge** rather than deleting everything.
 
 ## Docs map
 - `CLAUDE.md` — standing architectural rules

@@ -3,38 +3,71 @@ declare(strict_types=1);
 
 namespace Aavirbhava\AdsAnalytics\Cron;
 
+use Aavirbhava\AdsAnalytics\Model\Aggregation\DailySummaryAggregator;
+use Magento\Framework\App\Config\ScopeConfigInterface;
+use Magento\Framework\Stdlib\DateTime\DateTime;
+use Psr\Log\LoggerInterface;
+
 /**
- * P3-T2: rolls raw ads_analytics_visit / ads_analytics_funnel_event /
- * ads_analytics_order_attribution rows into ads_analytics_daily_summary.
- * Admin reports (P3-T4/P3-T5) read ONLY from the summary table — never from
- * raw tables at request time (CLAUDE.md constraint #6).
+ * P3-T2: nightly rollup into ads_analytics_daily_summary. Admin reports read
+ * ONLY from that table (CLAUDE.md #6).
+ *
+ * Re-sweeps a lookback WINDOW rather than just yesterday. Events reach the
+ * database through a queue, so a visit at 23:59 can be consumed after the
+ * 02:00 run, and an order placed near midnight can have its attribution row
+ * written later still. Recomputing recent days catches those; the aggregator's
+ * upsert replaces rather than increments, so repeated sweeps converge instead
+ * of double-counting.
  */
 class AggregateDailySummary
 {
+    private const XML_PATH_LOOKBACK_DAYS = 'aavirbhava_adsanalytics/general/aggregation_lookback_days';
+    private const DEFAULT_LOOKBACK_DAYS = 7;
+
+    private DailySummaryAggregator $aggregator;
+    private ScopeConfigInterface $scopeConfig;
+    private DateTime $dateTime;
+    private LoggerInterface $logger;
+
+    public function __construct(
+        DailySummaryAggregator $aggregator,
+        ScopeConfigInterface $scopeConfig,
+        DateTime $dateTime,
+        LoggerInterface $logger
+    ) {
+        $this->aggregator = $aggregator;
+        $this->scopeConfig = $scopeConfig;
+        $this->dateTime = $dateTime;
+        $this->logger = $logger;
+    }
+
     public function execute(): void
     {
-        // TODO(P3-T2): for the previous complete day (or since last run),
-        // group by (date, traffic_type, platform_code, source, medium,
-        // campaign) and upsert into ads_analytics_daily_summary: visits,
-        // add_to_carts, checkout_starts, orders, revenue.
-        //
-        // IMPORTANT: ads_analytics_visit/funnel_event/order_attribution have
-        // NULLABLE platform_code/source/medium/campaign, but
-        // ads_analytics_daily_summary does NOT (see its db_schema.xml
-        // comment) — substitute 'null_source' for any NULL value BEFORE
-        // grouping (e.g. COALESCE(platform_code, 'null_source') in the
-        // query, or in PHP after fetching).
-        //
-        // Skipping this does NOT silently duplicate rows — it fails loudly.
-        // A column default only applies when the column is OMITTED from the
-        // INSERT; passing an explicit NULL into a NOT NULL column raises
-        // MySQL error 1048 ("Column 'source' cannot be null") and this cron
-        // dies. If you are debugging a missing-summary-rows report, look for
-        // 1048 in the cron log, not for duplicate slices.
-        //
-        // Use 'null_source', NOT 'none': TrafficResolver legitimately returns
-        // medium='none' for direct traffic, meaning "verified: no medium".
-        // Reusing 'none' as the coalesce sentinel would make that
-        // indistinguishable from "the raw row was missing a medium".
+        $days = $this->getLookbackDays();
+        $to = $this->dateTime->gmtDate('Y-m-d');
+        $from = $this->dateTime->gmtDate('Y-m-d', strtotime('-' . $days . ' days'));
+
+        try {
+            $rows = $this->aggregator->aggregate($from, $to);
+            $this->logger->info(
+                sprintf(
+                    'Aavirbhava_AdsAnalytics: aggregated daily summary %s..%s (%d row operations)',
+                    $from,
+                    $to,
+                    $rows
+                )
+            );
+        } catch (\Throwable $e) {
+            // Already logged with detail by the aggregator. Swallowed so one
+            // bad day cannot wedge the whole cron group.
+            $this->logger->error('Aavirbhava_AdsAnalytics: daily aggregation cron aborted: ' . $e->getMessage());
+        }
+    }
+
+    private function getLookbackDays(): int
+    {
+        $days = (int)$this->scopeConfig->getValue(self::XML_PATH_LOOKBACK_DAYS);
+
+        return $days > 0 ? $days : self::DEFAULT_LOOKBACK_DAYS;
     }
 }

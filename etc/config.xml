@@ -41,6 +41,14 @@
                     absolute count in the reports an estimate.
                 -->
                 <sampling_rate>100</sampling_rate>
+                <!--
+                    Off by default: this makes the beacon log every decision to
+                    the browser console, which is a diagnostic aid and not
+                    something a live storefront should be doing.
+                -->
+                <debug_logging>0</debug_logging>
+                <!-- A week is generous for queue lag while staying cheap to recompute. -->
+                <aggregation_lookback_days>7</aggregation_lookback_days>
             </general>
 
 

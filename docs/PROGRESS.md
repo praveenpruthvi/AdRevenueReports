@@ -2,16 +2,16 @@
 
 Update this file in place after every work session. It's a current-state snapshot, not a log — session-by-session detail goes in `docs/status-reports/`.
 
-**Last updated:** 2026-09-18
-**Current phase:** Phase 1 — environment installed and schema verified live; capture pipeline not yet implemented
-**Current task:** Phase 1 complete (15/15). Phase 2 **unblocked** — checkout-type decision resolved (LUMA now, Hyvä documented drop-in); P2-T1 and P2-T3 Done. Next: P2-T2 (add-to-cart observer) and P2-T4 (order attribution). Phase 1 scaffold and architecture are done, plus the first real method bodies: `Model\EventIngestService` (rate limiting + ip/UA capture) and `Model\Service\TrafficResolver` (fully implemented). Everything else is still a `TODO` stub
+**Last updated:** 2026-09-19
+**Current phase:** Phase 3 complete; Phase 4 (export + ad-spend/ROAS) not yet started
+**Current task:** Phases 1, 2 and 3 are all complete and verified against real data. The capture pipeline runs end to end in a real browser; a nightly cron rolls raw events into `ads_analytics_daily_summary`; the admin report page renders Chart.js funnel and traffic-type charts above a filterable grid that reads only from that summary; and a retention purge removes raw per-visitor data on its own configurable window. The summary has been reconciled exactly against both the raw tables (P3-T6) and a seeded simulator run (P3-T8). Next: **Phase 4** — Excel/PDF export, `Api/AdSpendProviderInterface`, and ROAS.
 
 ## Phase status
 | Phase | Status |
 |---|---|
 | 1 — Scaffold + capture layer | **Complete (15/15)** — verified end to end in a real browser, reconciled exactly against a 300-visitor simulation, 104 unit + 26 integration tests green |
-| 2 — Funnel events + order attribution | Blocked (checkout-type decision) |
-| 3 — Aggregation + admin reporting | Not Started |
+| 2 — Funnel events + order attribution | **Complete (7/7)** — LUMA checkout adapter shipped, Hyvä left as a documented drop-in; full funnel `add_to_cart → checkout_start → checkout_step_shipping → checkout_step_payment → order_placed` confirmed live |
+| 3 — Aggregation + admin reporting | **Complete (8/8)** — nightly rollup + admin charts/grid, retention purge, summary reconciled exactly against both raw data and a seeded simulator run |
 | 4 — Export + ad-spend/ROAS | Not Started |
 
 ## Open decisions / blockers
@@ -29,6 +29,136 @@ _(none — the checkout-type decision was resolved 2026-09-19; see CLAUDE.md §R
   - Corrected the "skipping COALESCE duplicates rows" claim in `AggregateDailySummary`, `db_schema.xml` and SPECS §3 — with NOT NULL columns an explicit NULL raises MySQL 1048 and the cron fails loudly. Coalesce sentinel changed `'none'` → `'null_source'` so it stays distinct from the resolver's verified-absence `'none'`.
   - Reconciled rate-limit placement across SECURITY §4, TASKS P1-T9 and `EventIngestInterface`'s docblock (webapi layer, not the consumer); dropped the `platform_code` validation rule from SECURITY §2 since the value is always discarded and recomputed; corrected P1-T9b's false claim that tables are skipped without a schema whitelist.
 - Two earlier audit rounds against the scaffold found and fixed: a nullable-column unique-key bug in `ads_analytics_daily_summary` (silent duplicate rows), a sync-write contradiction between request logging and the async-only rule (resolved — `EventIngestService` is now publish-only, `EventConsumer` owns all DB writes including the request log), missing PHPDoc on webapi-facing interfaces, Instagram `platform_code` instability, and several `TrafficResolver` correctness bugs (case sensitivity, substring-vs-suffix search-engine matching, dropped UTM tagging, dropped campaign).
+
+### P3-T8 complete — simulator reconciliation, and three simulator fixes (2026-09-19)
+The task is "run the simulator with a known seed and reconcile", but none of that worked as written, because of three defects already logged here as open:
+
+**`--seed` was not reproducible.** Two causes. The script drew from the global `random` module inside a `ThreadPoolExecutor`, so the order of the draws depended on how the OS scheduled the workers and two runs with the same seed produced different visitor sets. And `uuid.uuid4()` reads from `os.urandom`, which `random.seed()` has no effect on, so visitor ids were never reproducible at all. Fixed by moving every random decision onto the main thread into a new `plan_visitor()` that runs to completion before any worker starts; workers (`send_visitor()`) now do nothing but I/O and contain no draws. UUIDs come from the run's own `random.Random` instance via `seeded_uuid()`. Dry-run mode also now runs serially — there is no network I/O to overlap, and concurrent `print()` calls interleave, which made the payload dump look non-deterministic when only the printing was.
+
+**The printed revenue was fiction.** `order_placed` and `add_to_cart` are server-only; the public endpoint drops them so nobody can POST an `order_placed` carrying someone else's order id (docs/SECURITY.md §3). The script correctly skipped sending them but still printed generated order and revenue figures in the same table as the events it did send, which invites the reader to reconcile them against a dashboard that is in fact correct and conclude the module lost them. The summary is now split into **SENT** (visits, checkout_starts — reconcilable) and **NOT SENT** (add_to_cart intents, order intents, notional revenue — structurally impossible for this script to produce), with the reason stated inline.
+
+**`datetime.utcnow()`** is deprecated from Python 3.12; replaced with a timezone-aware `now()`. Note the formatting had to change too: calling `.isoformat()` on a tz-aware value already appends `+00:00`, so the original `+ "Z"` would have produced `...+00:00Z`.
+
+**Reconciliation, and it is exact.** Snapshotted the summary per slice, ran 150 seeded visitors, drained the queue, re-aggregated, and diffed. All 8 slices matched the script's printed SENT figures on both metrics with no discrepancy: direct 20/4, organic 54/5, paid:bing 5/0, paid:google 7/1, paid:meta 14/1, paid:reddit 7/1, paid:tiktok 13/0, referral 30/6 — total 150 visits and 18 checkout_starts. `add_to_carts`, `orders` and `revenue` stayed at 37 / 6 / 468.00 throughout, exactly as the NOT SENT block predicts. The summary still equals the raw tables (470 visits, 54 checkout_starts on both sides), and the admin grid renders all 38 slices with the derived ratio columns computing. Traffic classification was correct across every platform and every organic search engine, all resolved server-side from click-id params and referrers.
+
+**What this does and does not sign off.** The simulator verifies the whole client-side path — beacon payload, endpoint, queue, consumer, classification, aggregation, grid — for visits and checkout stages. It cannot verify `add_to_carts`, `orders` or `revenue`, because it cannot raise server-only events. Those three columns are covered instead by the real browser checkout at P2-T6 and by the seeded server-side `add_to_cart` events at P3-T6.
+
+### P3-T7 complete — retention purge (2026-09-19)
+`Cron\PurgeOldData` was a TODO stub; the cron entry, the system.xml fields and the config.xml defaults already existed from the scaffold. Now implemented as `Model\Service\DataPurger` with `Model\Config\RetentionConfig`, plus `bin/magento aavirbhava:adsanalytics:purge` for running it on demand.
+
+**Three decisions worth not reversing:**
+
+*A retention window of 0 means disabled, not "delete everything".* The obvious implementation — cutoff = `now - N days` — turns a cleared admin field or a missing config row into a cutoff of `now`, and the next cron tick deletes every visit in the table, cascading into every funnel event and every order attribution. `RetentionConfig` therefore distinguishes "not configured" (null or empty → use the shipped 180/14 default) from "configured to 0" (→ disabled, caller skips the delete entirely), and clamps negatives to disabled too, since a negative window puts the cutoff in the future and matches every row ever written. The null check has to come *before* the int cast — casting first turns null into 0 and silently disables retention on any install whose config row has not been saved yet. Seven unit tests in `Test/Unit/Model/Config/RetentionConfigTest.php` pin this.
+
+*Visits are purged on `last_seen_at`, funnel events on their own `created_at`.* `ads_analytics_visit` is one row per visitor, updated on every landing, so `first_seen_at` is when the person was first seen — deleting on it would destroy someone who is still actively shopping and take their in-flight funnel and order attribution with it through the FK cascade. `last_seen_at` means "no activity for N days", which with a 90-day cookie lifetime is genuinely dead data by the time it is deleted. But that alone would let a continuously active visitor retain every event they ever raised, so funnel events are purged independently on their own timestamp rather than being left to the cascade.
+
+*Deletes are batched.* 5,000 rows per statement, capped at 1,000 batches per table per run. One unbounded DELETE against a large visit table holds locks for the whole statement, cascades into two child tables inside the same transaction, and can hit lock-wait timeout — wedging the cron group and blocking live ingest writes behind it. Each batch autocommits, so a mid-run failure leaves earlier batches purged and the next run resumes.
+
+**A consequence of purging that needed a guard elsewhere.** `ads_analytics_daily_summary` is kept for ever while its source rows are not, and the aggregator's upsert *replaces* a slice's values rather than incrementing them. Re-aggregating a date older than the retention window therefore recomputes it from a raw table that no longer holds those rows and overwrites real history with zeros. The nightly cron sweeps only a 7-day lookback so it can never reach back that far, but `aggregate --from/--to` can — so that command now refuses pre-retention dates with exit code 1 unless `--force` is passed. It compares against `DataPurger::cutoff()` rather than recomputing a cutoff of its own, so the guard can never disagree with what the purge actually deleted.
+
+**Schema change:** added a btree index on `ads_analytics_visit.last_seen_at`. `ads_analytics_funnel_event.created_at` and `ads_analytics_request_log.received_at` were already indexed, but the visit table was not, which would have made the nightly purge a full scan of the module's largest table.
+
+**Verified** by seeding back-dated rows alongside the live reconciliation dataset and purging with a 30/7-day window:
+- Dry-run counts (2 visits, 3 funnel events, 1 log row) matched the real purge exactly.
+- The two 300-day-old visits were deleted; the deliberately *active* test visitor survived, but its 300-day-old `product_view` was deleted while its recent `add_to_cart` remained — proving the independent funnel purge.
+- The FK cascade removed the old visit's `order_attribution` row.
+- `ads_analytics_daily_summary` was untouched (32 slices before and after), and the 120-visit reconciliation dataset was intact afterwards.
+- `--event-days=0 --log-days=0` reported "purge disabled", not a 120-row delete.
+- Both cron jobs resolve through DI and execute: `aavirbhava_adsanalytics_aggregate_daily_summary` at `0 2 * * *`, `aavirbhava_adsanalytics_purge_old_data` at `30 2 * * *`.
+- 127 unit tests green, 0 phpcs errors on the new files.
+
+Note for running the suite: `dev/tests/unit/phpunit.xml.dist` fails on a missing `allure/allure.config.php`. A minimal scoped config at `var/phpunit-ads.xml` (outside the module, not shipped) pointing at `Test/Unit` runs it cleanly.
+
+### P3-T6 complete — the summary reconciles exactly against raw data (2026-09-19)
+Checked the cron's output by recomputing every figure from the raw tables with a query deliberately written differently from the aggregator's (joining `ads_analytics_visit` to `ads_analytics_funnel_event` and `ads_analytics_order_attribution` directly, rather than through the aggregator's three UNION'd fact sources), so a shared bug could not cancel itself out.
+
+**Result: exact.** A per-slice diff across all 32 slices on visits / add_to_carts / checkout_starts / orders / revenue returns zero rows, in both directions — no summary row disagrees with raw, and no raw slice is missing a summary row. Totals: 120 visits, 37 add-to-carts, 17 checkout starts, 6 orders, 468.00 revenue. Per-day and per-traffic-type splits (paid 46 / organic 33 / referral 25 / direct 16) match the visit table exactly. Two further aggregation runs reported "0 summary row operations" and produced a byte-identical MD5 over every row, so the upsert is still converging rather than incrementing.
+
+**Finding 1 — `add_to_carts` was reconciling vacuously.** It matched at 0 = 0 because the raw funnel table held no `add_to_cart` rows at all: the traffic simulator cannot produce them, since `add_to_cart` is in `EventIngestService::SERVER_ONLY_EVENT_TYPES` and the public endpoint drops it. That column's aggregation path had therefore never been exercised by any test. 37 events were seeded through the genuine `ingestFromServer()` → queue → `EventConsumer` path (17 for visitors that reached checkout, 20 deterministic cart abandoners chosen by `crc32(uuid) % 5`) and the column then reconciled exactly. **Lesson for future verification: a metric that reconciles at zero has not been verified.** Check that the raw side is non-empty before believing a match.
+
+**Finding 2 — the funnel is not monotonic, and must not be rendered as drop-off percentages.** Real slices exist with `orders > checkout_starts` (for example `paid/google`: 3 visits, 0 add-to-carts, 1 order). This is not a join bug — the per-slice diff proves the aggregator reports the raw data faithfully. The cause is that `visits`, `add_to_carts` and `order_placed` are recorded server-side while `checkout_start` and the step events come from the storefront beacon, so an ad blocker, a consent gate or a dropped request loses the client-side stage while the server-side order still lands. `ads-dashboard-chart.js` already plots absolute counts rather than percentages of the previous stage, so this renders honestly; a comment now records why, because switching to drop-off percentages would show >100% or negative values on exactly these slices.
+
+**Not a defect, but worth stating:** `ads_analytics_daily_summary` has no `product_views` column, so the 120 raw `product_view` events are captured but never aggregated and cannot appear in any report. This matches docs/SPECS.md §3, which lists the columns as `visits`, `add_to_carts`, `checkout_starts`, `orders`, `revenue` — so it is a spec decision, not drift. Flagged for a decision rather than changed unilaterally: adding the column would make the funnel's widest stage visible, at the cost of a schema change and a spec amendment.
+
+### P3-T3/T4/T5 complete — the admin report page (2026-09-19)
+Admin > Reports > Ads Analytics now renders a real report instead of a blank page.
+
+- `Model\ResourceModel\DailySummary\Grid\Collection` is registered on `UiComponent\DataProvider\CollectionFactory` and derives three ratio columns in SQL rather than in PHP, so they stay sortable and filterable by the grid: `conversion_rate`, `cart_rate`, `revenue_per_visit`. Each divides by `NULLIF(visits, 0)`, which turns a zero-visit slice into NULL instead of a division-by-zero — MySQL would otherwise emit a warning and return NULL anyway, but only in non-strict mode, so relying on that would be install-dependent.
+- `Model\Config\Source\TrafficType` builds the grid's traffic-type filter from `TrafficResolver`'s own constants plus `VisitManager::TRAFFIC_TYPE_UNKNOWN`, so the filter cannot drift away from what the classifier actually writes.
+- Charts (`Block\Adminhtml\Dashboard`, `dashboard/overview.phtml`, `view/adminhtml/web/js/ads-dashboard-chart.js`) use core's bundled `chartJs` RequireJS alias. Do **not** add a module-local `paths: {chartjs: ...}` mapping — it shadows the core alias and loads a second copy.
+
+**Deviation from the task wording, deliberately.** TASKS.md called for a "Dashboard tab" and a "Grid tab". The page instead stacks the charts above the grid on one page, because `ads-dashboard-chart.js` reads the grid's own data via `registry.get(config.listingProvider, ...)` and re-draws whenever the provider's data changes. That is what makes filtering the grid also filter the charts. Two tabs would need either a second data provider (duplicated queries, and the two views could disagree) or cross-tab plumbing for no user-visible gain. The reason is recorded in a comment in `view/adminhtml/layout/ads_analytics_report_index.xml` so it is not "fixed" later by someone reading only TASKS.md.
+
+**Verified**, against the 32 summary rows the P3-T2 run produced:
+- The page returns HTTP 200 (81,060 bytes), titled "Ads Analytics", with both canvases, the chart component and the listing component all present in the markup.
+- The data source resolves through `getReport('aavirbhava_adsanalytics_summary_listing_data_source')` and returns 32 rows with the derived columns populated.
+- Filters apply: `traffic_type=paid` returns 24 rows whose only distinct traffic type is `paid`; `campaign LIKE '%spring%'` returns 5; a `date >=` bound applies cleanly.
+- Sorting works on a derived column (`ORDER BY conversion_rate DESC`), which is the thing computing the ratios in PHP would have broken.
+
+One verification route did **not** work and is worth not retrying: fetching the grid's `mui/index/render` URL by hand returns the component's HTML shell, not JSON, because the data response depends on request particulars the UI Component's own JS sets. The same thing happened with the request-log grid at P3-T5b. Verify grid data through the collection in PHP instead.
+
+
+### P3-T2 complete — the aggregation cron (2026-09-19)
+
+`Model\Aggregation\DailySummaryAggregator` builds `ads_analytics_daily_summary` with a single idempotent statement: `INSERT ... SELECT ... ON DUPLICATE KEY UPDATE col = VALUES(col)` over three UNION'd fact sources.
+
+Design decisions worth keeping:
+- **Visits bucket on `first_seen_at`, never `last_seen_at`.** first_seen_at is immutable, so a returning visitor cannot migrate between days. Using last_seen_at would make a re-run produce different numbers and destroy idempotency.
+- **Orders and revenue come from `ads_analytics_order_attribution` and are grouped by THAT table's dimensions**, not the visit's. That is the point of storing the attribution model on the row: under first-touch, an order belongs to the campaign that acquired the visitor, which may differ from the visit's last touch. Expect a first-touch slice to show orders with zero visits — that is correct, not a bug.
+- **Every dimension is COALESCEd to `'null_source'`.** The raw tables allow NULLs; the summary's unique key spans those columns and is NOT NULL, so an explicit NULL raises MySQL 1048 and kills the job.
+- **The cron re-sweeps a lookback window (default 7 days, configurable)** rather than just yesterday, because events arrive through a queue — a visit at 23:59 may be consumed after the 02:00 run. Safe precisely because the upsert replaces rather than increments.
+- Added `bin/magento aavirbhava:adsanalytics:aggregate [--days|--from|--to]`, without which the reports could only be populated by waiting for the nightly cron, making the dashboard untestable and backfilling impossible.
+
+Verified against real seeded data (120 visits, 188 funnel events, 6 orders placed through the genuine quote pipeline): visits 120/120, checkout_starts 17/17, orders 6/6, revenue 468.00/468.00 — exact on every metric. Running it twice more reported `0 summary row operations` with totals unchanged.
+
+Integration suite now **32 tests / 76 assertions** (6 new, covering the first_seen_at bucketing rule, NULL-sentinel handling, funnel attribution through the visit, idempotency across three runs, date-window scoping, and an empty window being a clean no-op). The integration install was stood up for the run and torn down again.
+
+**Known simplification:** dates are bucketed in **UTC**, not store timezone. For a store far from UTC, "yesterday" in the report is a UTC day. Left deliberately un-half-solved — fixing it means applying the store offset consistently across all three fact queries, and it should be done before this drives financial reporting.
+
+### P2-T6 complete — full funnel verified in a real browser, and the CSP trap (2026-09-19)
+
+User-run walkthrough, third attempt, now recording the complete funnel:
+`add_to_cart` -> `checkout_start` -> `checkout_step_shipping` -> `checkout_step_payment` -> `order_placed`, plus `product_view`.
+
+**The blocker was Content Security Policy, and it cost two wrong diagnoses.** The beacon config was emitted as an inline `<script>`. Magento's CSP blocks inline scripts on the checkout page — `"Executing inline script violates the following Content Security Policy directive 'script-src ...' The action has been blocked."` — so `window.aavirbhavaAdsAnalytics` never existed there, the beacon returned at its first guard, and every checkout event vanished silently. Product pages worked throughout, because CSP is report-only there, which made the failure look like a checkout-hook problem.
+
+Two implementations were built and discarded chasing that false lead: a jsLayout component under `checkout.root`, then a RequireJS mixin on `step-navigator`. Both were almost certainly correct; they simply had no beacon to call, and the adapter's own defensive `safeTrack()` swallowed the missing API exactly as designed. **The user's console screenshot found in one look what two rounds of server-side inspection could not** — when client-side behaviour is unexplained, ask for the browser console before theorising further.
+
+Fixes that came out of it:
+- **Config travels as a `data-config` attribute**, read by the EXTERNAL beacon file. CSP permits external scripts; only inline code is blocked. No CSP whitelist entry or inline-script hash was added on purpose — a hash would need regenerating on every config change (different store URL, different platform list) and would break silently.
+- **Checkout steps are detected from `window.location.hash`**, which Magento's step-navigator sets to the step code. That is observable from vanilla JS, so the RequireJS/Knockout exception added to CLAUDE.md #4 for P2-T3 is no longer needed — the storefront is 100% vanilla again.
+- **`onCheckoutPage()` now matches the path EXACTLY, not as a prefix.** The first successful run revealed a second bug: `/checkout/cart/` and `/checkout/onepage/success/` also match a `/checkout/` prefix, so viewing the cart and hitting the confirmation page each fired an extra `checkout_start` — inflating the top of the funnel and corrupting the one number the report exists to show.
+- **Beacon debug logging added** (23 log points): store config toggle, default off, plus `?adsanalytics_debug=1` remembered in sessionStorage so it survives a whole multi-page walkthrough. It narrates the event-type decision and why, consent state, checkout detection, each hash step, and whether each request was sent, deduped or suppressed.
+
+Worth knowing: **a `landing` writes no funnel row** — it creates or refreshes the visit. A first page view therefore appears in `ads_analytics_visit`, never in `ads_analytics_funnel_event`. The debug log now says so explicitly, because it reads as a missing event otherwise.
+
+### P2-T7 complete — volume run, and a simulator correction (2026-09-19)
+
+500 visitors -> **1240 events accepted, 0 failed, 1240 queued, drained to 0**. Exact match on everything the endpoint accepts: visits 500/500, checkout_start 60/60, all three checkout steps 60 each, product_view 500, **0 rejections**. Split: paid 213 / organic 130 / referral 83 / direct 74.
+
+The first attempt reconciled badly and that turned out to be a genuine consequence of P2-T5, not a bug: **1350 accepted minus 1228 queued = 122, exactly the 120 `add_to_cart` plus 2 `order_placed` the server-only gate discarded.** The simulator was still POSTing event types the endpoint now refuses by design.
+
+Rather than leave the tool quietly producing un-reconcilable numbers, it now knows about `SERVER_ONLY_EVENTS`, skips them, and prints `server-only, NOT sent: N` plus a warning that its add_to_cart/orders columns are funnel INTENT which will not appear in the database. Same principle as the earlier fix where it reported success while every request was failing: a test tool that misreports is worse than one that fails loudly.
+
+Consequence worth remembering: **the simulator can no longer exercise the add-to-cart or order paths at all.** Those go through `AddToCartObserver` and `OrderPlaceAfterObserver` and need a real cart and a real order — which is exactly what P2-T6's manual walkthrough is for.
+
+### P2-T2/T4/T5 complete — the funnel now reaches revenue (2026-09-19)
+
+**P2-T2 (add-to-cart)** and **P2-T4 (order attribution)** both route through a new `ServerEventDispatcher` -> `EventIngestService`, rather than publishing to the topic directly. That matters: publishing directly would have bypassed the kill switch, sampling, rate limiting, the server-side ip/UA capture and the publish-failure containment, all of which an observer should inherit rather than reimplement.
+
+**P2-T5 closed a real hole.** `order_placed` carries the order id and creates the attribution row, so accepting it over the public endpoint would have let anyone POST `{"event_type":"order_placed","entity_id":<someone else's order>}` and claim that order's revenue for their own visit. `order_placed` and `add_to_cart` are now server-only: the webapi `ingest()` drops them, and they reach the queue only through `ingestFromServer()`, which is deliberately absent from `Api\EventIngestInterface` so `etc/webapi.xml` cannot expose it. Verified live — forged POSTs of both types queued 0 messages.
+
+**Three bugs found by running it, none visible on inspection:**
+
+1. **`sales_order_place_after` is the wrong event.** docs/SPECS.md named it, but it is dispatched from inside `Order::place()` BEFORE the order is persisted, so `getId()` is null and the observer dropped every order silently. Now on `sales_model_service_quote_submit_success`, which fires right after `OrderManagement::place()` has saved it — and sits in `submitQuote()`, reached by both `placeOrder()` (frontend/REST) and the lower-level `submit()` integrations call.
+
+2. **`AbstractDb::save()` silently wrote nothing.** `ads_analytics_order_attribution`'s PK is `order_id` — supplied by us, not auto-increment. With the default `_useIsObjectNew = false`, `isObjectNotNew()` is just "has an id", so Magento issued `UPDATE ... WHERE order_id = 6`, matched zero rows and returned successfully.
+
+3. **Setting `_useIsObjectNew = true` then inserted `order_id = 0`**, because `saveNewObject()` unsets the id field before inserting (it assumes auto-increment). Both failure modes are silent. The writer now uses `insertOnDuplicate`, which sidesteps the whole class of problem and is exactly the semantics an at-least-once queue needs — a redelivery refreshes the row instead of duplicating or failing. Verified: two writes leave one row.
+
+Verified end to end: a visitor landed from a Google ad (`first_campaign`), landed again from Instagram (`last_campaign`), then ordered. The visit kept `first_touch=google/first_campaign` and `last_touch=instagram/last_campaign`; the attribution row credited **instagram/meta** under the default `last_touch`. Switching the config to `first_touch` and placing another order credited **google/first_campaign** — and order 7 KEPT `last_touch`, because the model is stored on the row rather than re-read at report time.
+
+Unit suite now **118 tests / 188 assertions**.
 
 ### P2-T3 complete — LUMA checkout adapter, Hyvä left as a drop-in (2026-09-19)
 
@@ -239,7 +369,7 @@ Deliberately deferred to a later pass (known, not forgotten):
 - ~~`etc/db_schema_whitelist.json`~~ — done, generated and committed (P1-T9b).
 - `Setup/Patch/Data/InstallDefaultPlatformMap.php`'s `apply()` body is still empty (P1-T3).
 - Admin controllers lack `HttpGetActionInterface`; `view/adminhtml/layout/` is an empty directory (git won't track it), so both admin pages render blank.
-- `tools/simulate_traffic.py`: `revenue` is printed but never sent, so P3-T8 revenue reconciliation can't work; `--seed` doesn't give reproducible runs (threaded, plus unseeded `uuid4()`); `datetime.utcnow()` is deprecated.
+- `tools/simulate_traffic.py`: all three defects noted here previously (unsent `revenue`, non-reproducible `--seed`, deprecated `datetime.utcnow()`) were FIXED at P3-T8. What remains is a structural limit, not a bug: the script cannot produce `add_to_cart` or `order_placed`, because both are server-only, so it can never exercise the `add_to_carts`, `orders` or `revenue` columns. The printed summary now says so explicitly rather than implying otherwise.
 - `order_attribution` has no FK to `sales_order`, and its CASCADE from `visit_id` means `PurgeOldData` deleting old visits would destroy attribution for live orders.
 - `order_attribution.traffic_type` and `daily_summary.traffic_type` are NOT NULL with no default, unlike `visit.traffic_type`'s `'unknown'` — P2-T4/P3-T2 must set them explicitly.
 - No idempotency anywhere in the consumer: AMQP is at-least-once, so a redelivered message writes a duplicate request-log row and funnel event.

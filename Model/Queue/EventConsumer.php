@@ -5,6 +5,7 @@ namespace Aavirbhava\AdsAnalytics\Model\Queue;
 
 use Aavirbhava\AdsAnalytics\Api\Data\EventInterface;
 use Aavirbhava\AdsAnalytics\Model\Service\EventValidator;
+use Aavirbhava\AdsAnalytics\Model\Service\OrderAttributionWriter;
 use Aavirbhava\AdsAnalytics\Model\Service\RequestLogWriter;
 use Aavirbhava\AdsAnalytics\Model\Service\TrafficResolver;
 use Aavirbhava\AdsAnalytics\Model\Service\VisitManager;
@@ -47,6 +48,7 @@ class EventConsumer
     private EventValidator $validator;
     private TrafficResolver $trafficResolver;
     private VisitManager $visitManager;
+    private OrderAttributionWriter $attributionWriter;
     private LoggerInterface $logger;
 
     public function __construct(
@@ -54,12 +56,14 @@ class EventConsumer
         EventValidator $validator,
         TrafficResolver $trafficResolver,
         VisitManager $visitManager,
+        OrderAttributionWriter $attributionWriter,
         LoggerInterface $logger
     ) {
         $this->requestLogWriter = $requestLogWriter;
         $this->validator = $validator;
         $this->trafficResolver = $trafficResolver;
         $this->visitManager = $visitManager;
+        $this->attributionWriter = $attributionWriter;
         $this->logger = $logger;
     }
 
@@ -99,6 +103,14 @@ class EventConsumer
 
         $visit = $this->visitManager->resolveOrCreateVisit($event->getVisitorUuid());
         $this->visitManager->recordFunnelEvent($visit, $event);
+
+        // An order closes the loop from ad click to revenue (P2-T4). Done
+        // here rather than in the observer because writing it there would be
+        // a synchronous DB write on the order-placement request.
+        if ($event->getEventType() === 'order_placed' && $event->getEntityId() !== null) {
+            $this->attributionWriter->write((int)$event->getEntityId(), $visit);
+            $this->visitManager->markConverted($visit);
+        }
     }
 
     /**

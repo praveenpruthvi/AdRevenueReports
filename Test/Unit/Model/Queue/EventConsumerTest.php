@@ -6,6 +6,7 @@ namespace Aavirbhava\AdsAnalytics\Test\Unit\Model\Queue;
 use Aavirbhava\AdsAnalytics\Model\Data\Event;
 use Aavirbhava\AdsAnalytics\Model\Queue\EventConsumer;
 use Aavirbhava\AdsAnalytics\Model\Service\EventValidator;
+use Aavirbhava\AdsAnalytics\Model\Service\OrderAttributionWriter;
 use Aavirbhava\AdsAnalytics\Model\Service\RequestLogWriter;
 use Aavirbhava\AdsAnalytics\Model\Service\TrafficResolver;
 use Aavirbhava\AdsAnalytics\Model\Service\VisitManager;
@@ -21,6 +22,7 @@ class EventConsumerTest extends TestCase
     /** @var EventValidator&MockObject */ private $validator;
     /** @var TrafficResolver&MockObject */ private $resolver;
     /** @var VisitManager&MockObject */ private $visitManager;
+    /** @var OrderAttributionWriter&MockObject */ private $attributionWriter;
     /** @var LoggerInterface&MockObject */ private $logger;
     private EventConsumer $consumer;
 
@@ -30,6 +32,7 @@ class EventConsumerTest extends TestCase
         $this->validator = $this->createMock(EventValidator::class);
         $this->resolver = $this->createMock(TrafficResolver::class);
         $this->visitManager = $this->createMock(VisitManager::class);
+        $this->attributionWriter = $this->createMock(OrderAttributionWriter::class);
         $this->logger = $this->createMock(LoggerInterface::class);
 
         $this->resolver->method('resolve')->willReturn([
@@ -38,7 +41,8 @@ class EventConsumerTest extends TestCase
         ]);
 
         $this->consumer = new EventConsumer(
-            $this->logWriter, $this->validator, $this->resolver, $this->visitManager, $this->logger
+            $this->logWriter, $this->validator, $this->resolver, $this->visitManager,
+            $this->attributionWriter, $this->logger
         );
     }
 
@@ -122,6 +126,51 @@ class EventConsumerTest extends TestCase
         $this->consumer->process($this->event());
     }
 
+    /** P2-T4: an order must produce an attribution row and flag the visit. */
+    public function testOrderPlacedWritesAttributionAndMarksConverted(): void
+    {
+        $this->logWriter->method('logPending')->willReturn(null);
+        $this->validator->method('validate')->willReturn(null);
+        $this->validator->method('isLanding')->willReturn(false);
+
+        $visit = $this->createMock(Visit::class);
+        $this->visitManager->method('resolveOrCreateVisit')->willReturn($visit);
+
+        $this->attributionWriter->expects($this->once())->method('write')->with(77, $visit);
+        $this->visitManager->expects($this->once())->method('markConverted')->with($visit);
+
+        $event = $this->event('order_placed');
+        $event->setEntityId(77);
+        $this->consumer->process($event);
+    }
+
+    /** Any other funnel event must NOT touch attribution. */
+    public function testNonOrderEventDoesNotWriteAttribution(): void
+    {
+        $this->logWriter->method('logPending')->willReturn(null);
+        $this->validator->method('validate')->willReturn(null);
+        $this->validator->method('isLanding')->willReturn(false);
+        $this->visitManager->method('resolveOrCreateVisit')->willReturn($this->createMock(Visit::class));
+
+        $this->attributionWriter->expects($this->never())->method('write');
+        $this->visitManager->expects($this->never())->method('markConverted');
+
+        $this->consumer->process($this->event('add_to_cart'));
+    }
+
+    /** An order event with no id cannot be attributed to anything. */
+    public function testOrderPlacedWithoutEntityIdSkipsAttribution(): void
+    {
+        $this->logWriter->method('logPending')->willReturn(null);
+        $this->validator->method('validate')->willReturn(null);
+        $this->validator->method('isLanding')->willReturn(false);
+        $this->visitManager->method('resolveOrCreateVisit')->willReturn($this->createMock(Visit::class));
+
+        $this->attributionWriter->expects($this->never())->method('write');
+
+        $this->consumer->process($this->event('order_placed'));
+    }
+
     /**
      * The resolver must receive the click-id re-keyed onto the query array by
      * its param NAME — that is the shape TrafficResolver expects, and the
@@ -147,7 +196,7 @@ class EventConsumerTest extends TestCase
         $event = $this->event();
         $event->setClickIdParam('gclid')->setClickIdValue('G1')->setReferrer('https://ref.example/');
 
-        (new EventConsumer($this->logWriter, $this->validator, $resolver, $this->visitManager, $this->logger))
+        (new EventConsumer($this->logWriter, $this->validator, $resolver, $this->visitManager, $this->attributionWriter, $this->logger))
             ->process($event);
     }
 }

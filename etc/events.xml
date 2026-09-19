@@ -6,8 +6,26 @@
         <observer name="aavirbhava_adsanalytics_add_to_cart"
                   instance="Aavirbhava\AdsAnalytics\Observer\AddToCartObserver"/>
     </event>
-    <!-- P2-T4 -->
-    <event name="sales_order_place_after">
+    <!--
+        P2-T4. NOT sales_order_place_after, which docs/SPECS.md originally
+        named: that event is dispatched from inside Order::place(), BEFORE the
+        order is persisted, so $order->getId() is still null there and no
+        attribution row could reference it.
+
+        sales_model_service_quote_submit_success is dispatched from
+        QuoteManagement::submitQuote() immediately after
+        OrderManagement::place() has persisted the order, so the order DOES
+        have an id. It was chosen over checkout_submit_all_after because
+        submitQuote() is reached by BOTH placeOrder() (frontend checkout and
+        the REST API) and the lower-level submit() that integrations call,
+        whereas checkout_submit_all_after only fires on the placeOrder path.
+
+        Admin-created orders are excluded for free: they carry no visitor
+        cookie, so ServerEventDispatcher finds no visitor and drops the event.
+        That is correct — an order raised in the admin has no ad click behind
+        it and must not be attributed to whoever the admin last browsed as.
+    -->
+    <event name="sales_model_service_quote_submit_success">
         <observer name="aavirbhava_adsanalytics_order_place_after"
                   instance="Aavirbhava\AdsAnalytics\Observer\OrderPlaceAfterObserver"/>
     </event>

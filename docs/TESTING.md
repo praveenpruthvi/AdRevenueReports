@@ -80,6 +80,13 @@ python3 tools/simulate_traffic.py --base-url https://magento.test --visitors 500
 ```
 See the script's header comment for the full option list (platform mix, concurrency, funnel drop-off rates, random seed for reproducibility).
 
+**What the simulator can and cannot verify (established at P3-T8).** It prints its summary in two blocks and only the first is reconcilable:
+
+- **SENT** — `landing` (one visit per `visitor_uuid`), `product_view`, `checkout_start` and the checkout step events. These must reconcile *exactly* against `ads_analytics_daily_summary`. Reconcile by snapshotting the summary per slice, running the simulator, draining the queue, re-aggregating, and diffing the before/after delta against the printed figures — not by comparing absolute totals, which include whatever data was already there.
+- **NOT SENT** — `add_to_cart` and `order_placed`. Both are server-only and the public endpoint drops them (docs/SECURITY.md §3), so the simulator cannot create them and the "revenue" it prints corresponds to no order. Expect the summary's `add_to_carts`, `orders` and `revenue` columns to be **unchanged** by a simulator run; that is the correct result, not a lost event. Those columns are verified with a real add-to-cart and a real checkout instead.
+
+`--seed` gives a byte-identical dataset across runs, including visitor UUIDs. Remember to drain the queue (`bin/magento queue:consumers:start AavirbhavaAdsAnalyticsEventConsumer`) and then run `bin/magento aavirbhava:adsanalytics:aggregate` before reconciling — the reports read only from the summary table, so nothing appears until both have run.
+
 ## 6. Sign-off checklist per phase
 1. All unit/integration tests for the phase pass.
 2. Manual verification task for the phase (already listed in `docs/TASKS.md`) completed.

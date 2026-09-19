@@ -1,63 +1,45 @@
 <?php
 /**
- * P3-T4 groundwork. All output escaped via $escaper — the source/medium/
- * campaign values shown here are attacker-controllable (docs/SECURITY.md §2).
+ * P3-T4 — funnel drop-off and traffic-type breakdown, rendered above the
+ * report grid and bound to that grid's data provider.
+ *
+ * text/x-magento-init rather than an inline <script>: its type is not
+ * executable JavaScript, so it is not what Magento's CSP blocks. (The
+ * storefront hit exactly that wall — see CLAUDE.md #4.)
  *
  * @var \Aavirbhava\AdsAnalytics\Block\Adminhtml\Dashboard $block
  * @var \Magento\Framework\Escaper $escaper
  */
-$rows = $block->getTrafficTypeBreakdown();
 ?>
-<div class="aavirbhava-adsanalytics-dashboard">
-    <?php if (!$rows): ?>
-        <div class="message message-notice">
-            <span>
-                <strong><?= $escaper->escapeHtml(__('No aggregated data yet.')) ?></strong><br/>
-                <?= $escaper->escapeHtml(__(
-                    'This report reads from ads_analytics_daily_summary, which is built by the '
-                    . 'nightly aggregation cron. Until that cron has run at least once, there is '
-                    . 'nothing to show here — even if visits are already being captured.'
-                )) ?>
-            </span>
+<div class="admin__fieldset-wrapper aavirbhava-ads-charts">
+    <div class="admin__fieldset-wrapper-title">
+        <strong><?= $escaper->escapeHtml(__('Funnel &amp; Traffic Breakdown')) ?></strong>
+    </div>
+    <div class="admin__fieldset-wrapper-content aavirbhava-ads-charts__content">
+        <div class="aavirbhava-ads-charts__panel">
+            <p class="aavirbhava-ads-charts__title"><?= $escaper->escapeHtml(__('Funnel drop-off')) ?></p>
+            <canvas id="aavirbhava-ads-funnel-canvas"></canvas>
         </div>
-        <div class="message message-warning">
-            <span>
-                <?= $escaper->escapeHtml(__(
-                    'Pipeline status: the ingest endpoint and queue publisher are live, but the '
-                    . 'queue consumer (P1-T6) and the aggregation cron (P3-T2) are not implemented '
-                    . 'yet, so captured events are still sitting on the queue and no summary rows '
-                    . 'exist. This page is wired correctly and will populate once those land.'
-                )) ?>
-            </span>
+        <div class="aavirbhava-ads-charts__panel">
+            <p class="aavirbhava-ads-charts__title"><?= $escaper->escapeHtml(__('Visits by traffic type')) ?></p>
+            <canvas id="aavirbhava-ads-traffic-canvas"></canvas>
         </div>
-    <?php else: ?>
-        <div class="admin__table-wrapper">
-            <table class="data-grid">
-                <thead>
-                    <tr>
-                        <th class="data-grid-th"><?= $escaper->escapeHtml(__('Traffic Type')) ?></th>
-                        <th class="data-grid-th"><?= $escaper->escapeHtml(__('Visits')) ?></th>
-                        <th class="data-grid-th"><?= $escaper->escapeHtml(__('Add to Carts')) ?></th>
-                        <th class="data-grid-th"><?= $escaper->escapeHtml(__('Checkout Starts')) ?></th>
-                        <th class="data-grid-th"><?= $escaper->escapeHtml(__('Orders')) ?></th>
-                        <th class="data-grid-th"><?= $escaper->escapeHtml(__('Conversion Rate')) ?></th>
-                        <th class="data-grid-th"><?= $escaper->escapeHtml(__('Revenue')) ?></th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php foreach ($rows as $row): ?>
-                    <tr>
-                        <td><?= $escaper->escapeHtml($row['traffic_type']) ?></td>
-                        <td><?= $escaper->escapeHtml((string)$row['visits']) ?></td>
-                        <td><?= $escaper->escapeHtml((string)$row['add_to_carts']) ?></td>
-                        <td><?= $escaper->escapeHtml((string)$row['checkout_starts']) ?></td>
-                        <td><?= $escaper->escapeHtml((string)$row['orders']) ?></td>
-                        <td><?= $escaper->escapeHtml($block->getConversionRate($row)) ?></td>
-                        <td><?= $escaper->escapeHtml($block->formatRevenue($row)) ?></td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-    <?php endif; ?>
+        <p class="aavirbhava-ads-charts__empty" style="display:none;">
+            <?= $escaper->escapeHtml(__('No aggregated data for the current filters. The nightly rollup builds this table; run bin/magento aavirbhava:adsanalytics:aggregate to populate it now.')) ?>
+        </p>
+        <p class="aavirbhava-ads-charts__note">
+            <?= $escaper->escapeHtml(__('Charts reflect the rows currently shown by the grid below, including its filters and page size.')) ?>
+        </p>
+    </div>
 </div>
+<script type="text/x-magento-init">
+{
+    "#aavirbhava-ads-funnel-canvas": {
+        "Aavirbhava_AdsAnalytics/js/ads-dashboard-chart": {
+            "listingProvider": "<?= $escaper->escapeJs($block->getListingProviderName()) ?>",
+            "funnelCanvas": "aavirbhava-ads-funnel-canvas",
+            "trafficCanvas": "aavirbhava-ads-traffic-canvas"
+        }
+    }
+}
+</script>

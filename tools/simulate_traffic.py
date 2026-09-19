@@ -33,13 +33,32 @@ Options:
     --checkout-start-rate  Fraction of cart-adders that start checkout (default: 0.5)
     --concurrency          Parallel worker threads (default: 10)
     --delay                Seconds to sleep between a visitor's own events (default: 0.05)
-    --seed                 Random seed for reproducible runs (default: none)
+    --seed                 Random seed. Runs with the same seed generate an identical
+                           dataset, including visitor UUIDs (default: none)
     --dry-run              Print payloads instead of sending them
 
-At the end, prints a summary of exactly what was generated, broken out by
-traffic_type (and by platform within paid) — visitor counts, add-to-carts,
-checkout-starts, orders, "revenue" — so you can reconcile it against the
-admin dashboard/grid for Phase 3 verification.
+At the end, prints what was generated, broken out by traffic_type (and by
+platform within paid), for reconciliation against the admin dashboard/grid in
+Phase 3 verification.
+
+WHAT THIS SCRIPT CAN AND CANNOT VERIFY
+--------------------------------------
+The summary is printed in two blocks, and the distinction matters.
+
+SENT: landing (one visit per visitor_uuid), product_view, checkout_start and
+the checkout step events. These reach the ingest endpoint and must reconcile
+exactly against ads_analytics_daily_summary.
+
+NOT SENT: add_to_cart and order_placed. Both are server-only — the module
+raises them from its own observers, and the public endpoint deliberately
+drops them so that nobody can POST an order_placed carrying someone else's
+order id and claim that order's revenue (docs/SECURITY.md section 3). This
+script therefore cannot produce them, and the "revenue" it prints corresponds
+to no order in the database. Earlier versions printed those figures in the
+same table as the sent ones, which made the summary look un-reconcilable
+against a dashboard that was in fact correct. The daily summary's
+add_to_carts, orders and revenue columns have to be verified with a real
+add-to-cart and a real checkout instead.
 """
 
 import argparse
@@ -81,9 +100,20 @@ REFERRAL_DOMAINS = [
 CAMPAIGNS = ["spring_sale", "brand_awareness", "retargeting", "new_arrivals", "clearance"]
 
 
-def build_visitor(traffic_type, platform=None):
+def seeded_uuid(rng):
+    """
+    A UUID4-shaped value drawn from the run's seeded RNG.
+
+    uuid.uuid4() reads from os.urandom and is therefore NOT affected by
+    random.seed(), which is what silently made --seed produce a different
+    visitor set on every run even though every other decision was seeded.
+    """
+    return str(uuid.UUID(int=rng.getrandbits(128), version=4))
+
+
+def build_visitor(traffic_type, rng, platform=None):
     visitor = {
-        "visitor_uuid": str(uuid.uuid4()),
+        "visitor_uuid": seeded_uuid(rng),
         "traffic_type": traffic_type,  # kept client-side for stats only; NOT sent in the payload
         "platform_code": None,
         "click_id_param": None,
@@ -98,16 +128,16 @@ def build_visitor(traffic_type, platform=None):
     if traffic_type == "paid":
         visitor["platform_code"] = platform
         visitor["click_id_param"] = CLICK_ID_PARAM[platform]
-        visitor["click_id_value"] = uuid.uuid4().hex[:16]
-        visitor["utm_source"] = "instagram" if platform == "meta" and random.random() < 0.4 else platform
+        visitor["click_id_value"] = seeded_uuid(rng).replace("-", "")[:16]
+        visitor["utm_source"] = "instagram" if platform == "meta" and rng.random() < 0.4 else platform
         visitor["utm_medium"] = "cpc"
-        visitor["utm_campaign"] = random.choice(CAMPAIGNS)
+        visitor["utm_campaign"] = rng.choice(CAMPAIGNS)
     elif traffic_type == "organic":
-        engine = random.choice(list(SEARCH_ENGINE_REFERRERS))
+        engine = rng.choice(sorted(SEARCH_ENGINE_REFERRERS))
         visitor["referrer"] = SEARCH_ENGINE_REFERRERS[engine]
         visitor["_expected_source"] = engine
     elif traffic_type == "referral":
-        visitor["referrer"] = random.choice(REFERRAL_DOMAINS)
+        visitor["referrer"] = rng.choice(REFERRAL_DOMAINS)
     # direct: nothing to set — no referrer, no params
 
     return visitor
@@ -127,17 +157,47 @@ def build_payload(visitor, event_type, entity_id=None):
         "referrer": visitor["referrer"] if is_landing else None,
         "landing_page": visitor["landing_page"] if is_landing else None,
         "entity_id": entity_id,
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        # datetime.utcnow() is deprecated from Python 3.12. Note the explicit
+        # strftime: calling .isoformat() on a tz-aware value already appends
+        # "+00:00", so the old "+ Z" would have produced "...+00:00Z".
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
 
 
-def simulate_one_visitor(args, session, url, traffic_type, platform, stats_lock, stats, first_error):
-    visitor = build_visitor(traffic_type, platform)
-    events = ["landing", "product_view"]
+# Event types the public ingest endpoint deliberately REFUSES.
+#
+# add_to_cart and order_placed are raised server-side by this module's own
+# observers (Observer/AddToCartObserver, Observer/OrderPlaceAfterObserver) and
+# are dropped if they arrive over the REST endpoint — otherwise anyone could
+# POST {"event_type":"order_placed","entity_id":<someone else's order>} and
+# claim that order's revenue for their own visit (docs/SECURITY.md §3).
+#
+# This script therefore cannot simulate them. Sending them anyway would make
+# the summary un-reconcilable: they would be counted here and silently
+# discarded by the server. Exercise those two paths with a real add-to-cart
+# and a real order instead.
+SERVER_ONLY_EVENTS = {"add_to_cart", "order_placed"}
 
-    add_to_cart = random.random() < args.add_to_cart_rate
-    checkout_start = add_to_cart and random.random() < args.checkout_start_rate
-    order_placed = checkout_start and random.random() < args.conversion_rate
+
+def plan_visitor(args, rng, platforms):
+    """
+    Decides EVERYTHING about one visitor up front, on the main thread.
+
+    Every random draw for the whole run happens here, in a single
+    deterministic sequence, before any worker thread starts. That is what
+    makes --seed actually reproducible: the previous version drew from the
+    global `random` module inside the thread pool, so the order of the draws
+    depended on how the OS happened to schedule the workers and two runs with
+    the same seed produced different data. Workers now only perform I/O.
+    """
+    traffic_type = pick_traffic_type(args, rng)
+    platform = rng.choice(platforms) if traffic_type == "paid" else None
+    visitor = build_visitor(traffic_type, rng, platform)
+
+    events = ["landing", "product_view"]
+    add_to_cart = rng.random() < args.add_to_cart_rate
+    checkout_start = add_to_cart and rng.random() < args.checkout_start_rate
+    order_placed = checkout_start and rng.random() < args.conversion_rate
 
     if add_to_cart:
         events.append("add_to_cart")
@@ -146,12 +206,36 @@ def simulate_one_visitor(args, session, url, traffic_type, platform, stats_lock,
     if order_placed:
         events.append("order_placed")
 
-    revenue = round(random.uniform(25, 300), 2) if order_placed else 0.0
+    return {
+        "visitor": visitor,
+        "traffic_type": traffic_type,
+        "platform": platform,
+        "events": events,
+        # Drawn here rather than in the worker so the payloads themselves are
+        # reproducible too, not just the counts.
+        "entity_ids": [rng.randint(1, 500) for _ in events],
+        "add_to_cart": add_to_cart,
+        "checkout_start": checkout_start,
+        "order_placed": order_placed,
+        "revenue": round(rng.uniform(25, 300), 2) if order_placed else 0.0,
+    }
+
+
+def send_visitor(args, session, url, plan, stats_lock, stats, first_error):
+    """
+    Pure I/O: posts one visitor's already-decided events. Contains no random
+    draws, so running this concurrently cannot affect the generated dataset.
+    """
+    visitor = plan["visitor"]
     sent_ok = 0
     sent_failed = 0
+    skipped_server_only = 0
 
-    for event_type in events:
-        payload = build_payload(visitor, event_type, entity_id=random.randint(1, 500))
+    for event_type, entity_id in zip(plan["events"], plan["entity_ids"]):
+        if event_type in SERVER_ONLY_EVENTS:
+            skipped_server_only += 1
+            continue
+        payload = build_payload(visitor, event_type, entity_id=entity_id)
         if args.dry_run:
             print({"event": payload})
         else:
@@ -174,22 +258,32 @@ def simulate_one_visitor(args, session, url, traffic_type, platform, stats_lock,
         if args.delay:
             time.sleep(args.delay)
 
-    key = f"paid:{platform}" if traffic_type == "paid" else traffic_type
     with stats_lock:
-        stats.setdefault(key, {"visitors": 0, "add_to_cart": 0, "checkout_start": 0, "orders": 0, "revenue": 0.0})
-        s = stats[key]
-        s["visitors"] += 1
-        s["add_to_cart"] += int(add_to_cart)
-        s["checkout_start"] += int(checkout_start)
-        s["orders"] += int(order_placed)
-        s["revenue"] += revenue
-        stats.setdefault("__transport__", {"ok": 0, "failed": 0})
+        stats.setdefault("__transport__", {"ok": 0, "failed": 0, "skipped": 0})
         stats["__transport__"]["ok"] += sent_ok
         stats["__transport__"]["failed"] += sent_failed
+        stats["__transport__"]["skipped"] += skipped_server_only
 
 
-def pick_traffic_type(args):
-    r = random.random()
+def tally(plans):
+    """
+    Builds the printed breakdown from the PLANS, not from what the threads
+    did, so the summary is a deterministic function of the seed alone.
+    """
+    stats = {}
+    for plan in plans:
+        key = f"paid:{plan['platform']}" if plan["traffic_type"] == "paid" else plan["traffic_type"]
+        s = stats.setdefault(key, {"visitors": 0, "add_to_cart": 0, "checkout_start": 0, "orders": 0, "revenue": 0.0})
+        s["visitors"] += 1
+        s["add_to_cart"] += int(plan["add_to_cart"])
+        s["checkout_start"] += int(plan["checkout_start"])
+        s["orders"] += int(plan["order_placed"])
+        s["revenue"] += plan["revenue"]
+    return stats
+
+
+def pick_traffic_type(args, rng):
+    r = rng.random()
     if r < args.paid_share:
         return "paid"
     r -= args.paid_share
@@ -228,8 +322,10 @@ def main():
         print("paid-share + organic-share + referral-share must be <= 1.0 (remainder is direct)", file=sys.stderr)
         sys.exit(1)
 
-    if args.seed is not None:
-        random.seed(args.seed)
+    # One RNG instance for the whole run, rather than seeding the global
+    # `random` module: nothing else can perturb its sequence, and every draw
+    # is made on the main thread in plan_visitor() below.
+    rng = random.Random(args.seed)
 
     platforms = [p.strip() for p in args.platforms.split(",") if p.strip()]
     for p in platforms:
@@ -248,16 +344,26 @@ def main():
     stats = {}
     first_error = [None]
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as pool:
-        futures = []
-        for _ in range(args.visitors):
-            traffic_type = pick_traffic_type(args)
-            platform = random.choice(platforms) if traffic_type == "paid" else None
-            futures.append(pool.submit(simulate_one_visitor, args, session, url, traffic_type, platform, stats_lock, stats, first_error))
-        for f in concurrent.futures.as_completed(futures):
-            f.result()
+    # Generate the entire dataset first, deterministically, then send it.
+    plans = [plan_visitor(args, rng, platforms) for _ in range(args.visitors)]
 
-    transport = stats.pop("__transport__", {"ok": 0, "failed": 0})
+    if args.dry_run:
+        # Serial on purpose. There is no network I/O to overlap, and print()
+        # from several threads interleaves: two payload lines collide and the
+        # dump comes out with one line merged, which looks like the generator
+        # being non-deterministic when it is only the printing that is.
+        for plan in plans:
+            send_visitor(args, session, url, plan, stats_lock, stats, first_error)
+    else:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=args.concurrency) as pool:
+            futures = [
+                pool.submit(send_visitor, args, session, url, plan, stats_lock, stats, first_error)
+                for plan in plans
+            ]
+            for f in concurrent.futures.as_completed(futures):
+                f.result()
+
+    transport = stats.pop("__transport__", {"ok": 0, "failed": 0, "skipped": 0})
 
     # Report what actually landed BEFORE the intent summary. Previously this
     # script printed a full breakdown even when every single request had
@@ -266,6 +372,11 @@ def main():
     print("\n=== Transport ===")
     print(f"  events accepted (HTTP 200): {transport['ok']}")
     print(f"  events failed:              {transport['failed']}")
+    if transport.get("skipped"):
+        print(f"  server-only, NOT sent:      {transport['skipped']}"
+              f"  (add_to_cart / order_placed — raised by observers, not the endpoint)")
+        print("     -> the add_to_cart and orders columns below are funnel INTENT;")
+        print("        they will NOT appear in the database from this run.")
     if transport["failed"]:
         print(f"  first error: {first_error[0]}")
         if transport["ok"] == 0:
@@ -274,18 +385,40 @@ def main():
             print("  *** it against the dashboard until transport succeeds.")
             print("  *** For a local docker-magento store, try --insecure.")
 
-    print("\n=== Simulation summary (reconcile against admin dashboard/grid) ===")
-    total = {"visitors": 0, "add_to_cart": 0, "checkout_start": 0, "orders": 0, "revenue": 0.0}
-    for key, s in sorted(stats.items()):
-        print(f"{key:16s}  visitors={s['visitors']:4d}  add_to_cart={s['add_to_cart']:4d}  "
-              f"checkout_start={s['checkout_start']:4d}  orders={s['orders']:3d}  revenue=${s['revenue']:.2f}")
-        for k in total:
-            total[k] += s[k]
-    print(f"{'TOTAL':16s}  visitors={total['visitors']:4d}  add_to_cart={total['add_to_cart']:4d}  "
-          f"checkout_start={total['checkout_start']:4d}  orders={total['orders']:3d}  revenue=${total['revenue']:.2f}")
-    print("\nNote: 'paid:<platform>' rows should reconcile against traffic_type=paid rows in the")
-    print("admin dashboard/grid, grouped further by platform_code; 'organic'/'referral'/'direct'")
-    print("rows should reconcile against their respective traffic_type in the same reports.")
+    stats = tally(plans)
+
+    # The breakdown is split in two on purpose. Only the first block can be
+    # reconciled against the admin reports; the second describes events this
+    # script is structurally incapable of producing, and printing them in one
+    # undifferentiated table (as this script used to) invites exactly the
+    # wrong conclusion — that the module dropped them.
+    print("\n=== SENT — reconcile these against the admin dashboard/grid ===")
+    print(f"{'slice':16s}  {'visits':>7s}  {'checkout_starts':>16s}")
+    total_visits = total_cs = 0
+    for key, s_ in sorted(stats.items()):
+        print(f"{key:16s}  {s_['visitors']:7d}  {s_['checkout_start']:16d}")
+        total_visits += s_["visitors"]
+        total_cs += s_["checkout_start"]
+    print(f"{'TOTAL':16s}  {total_visits:7d}  {total_cs:16d}")
+    print("  visits          -> ads_analytics_daily_summary.visits (one visit row per visitor_uuid)")
+    print("  checkout_starts -> ads_analytics_daily_summary.checkout_starts")
+    print("  'paid:<platform>' rows reconcile against traffic_type=paid grouped by platform_code;")
+    print("  organic/referral/direct reconcile against their own traffic_type.")
+    print("  product_view events are sent and stored in ads_analytics_funnel_event, but the")
+    print("  summary table has no product_views column, so they do not appear in reports.")
+
+    print("\n=== NOT SENT — simulated intent only, will NOT appear anywhere ===")
+    total_atc = sum(s_["add_to_cart"] for s_ in stats.values())
+    total_orders = sum(s_["orders"] for s_ in stats.values())
+    total_revenue = sum(s_["revenue"] for s_ in stats.values())
+    print(f"  add_to_cart intents: {total_atc}")
+    print(f"  order intents:       {total_orders}")
+    print(f"  notional revenue:    ${total_revenue:.2f}")
+    print("  add_to_cart and order_placed are server-only (docs/SECURITY.md section 3): the public")
+    print("  endpoint drops them, so this script cannot create them and the revenue figure above")
+    print("  corresponds to no order in the database. The daily summary's add_to_carts, orders and")
+    print("  revenue columns must be verified with a real add-to-cart and a real checkout instead.")
+    print("  Expect those three columns to read 0 for the traffic this run generated.")
 
 
 if __name__ == "__main__":

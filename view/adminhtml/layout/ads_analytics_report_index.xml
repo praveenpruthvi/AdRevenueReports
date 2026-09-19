@@ -1,17 +1,26 @@
 <?xml version="1.0"?>
 <!--
-    P3-T3/P3-T4. Layout handle for Controller\Adminhtml\Report\Index.
-    Without this file the controller returned a page with a title and nothing
-    else — which is what the blank admin page was.
+    P3-T3/P3-T4/P3-T5 — the Ads Analytics report page.
+
+    Chart ABOVE grid on a single page, rather than the "Dashboard tab / Grid
+    tab" the original spec sketched. Two reasons: it matches the pattern
+    Aavirbhava_SalesAnalytics already established for its dashboard, and the
+    chart is bound to the GRID's data provider — so having both visible at
+    once is the point. Split across tabs, applying a filter would silently
+    reshape a chart the admin cannot see.
 -->
 <page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
       xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
     <update handle="styles"/>
+    <head>
+        <css src="Aavirbhava_AdsAnalytics::css/dashboard.css"/>
+    </head>
     <body>
         <referenceContainer name="content">
             <block class="Aavirbhava\AdsAnalytics\Block\Adminhtml\Dashboard"
                    name="aavirbhava_adsanalytics_dashboard"
                    template="Aavirbhava_AdsAnalytics::dashboard/overview.phtml"/>
+            <uiComponent name="aavirbhava_adsanalytics_summary_listing"/>
         </referenceContainer>
     </body>
 </page>

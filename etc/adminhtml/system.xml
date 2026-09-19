@@ -23,6 +23,33 @@
                     <source_model>Aavirbhava\AdsAnalytics\Model\Config\Source\AttributionModel</source_model>
                     <comment>docs/SPECS.md §4 — used to pick which touch populates ads_analytics_order_attribution.</comment>
                 </field>
+                <field id="aggregation_lookback_days" translate="label" type="text" sortOrder="34" showInDefault="1" showInWebsite="0" showInStore="0">
+                    <label>Report Aggregation Lookback (days)</label>
+                    <validate>validate-digits validate-greater-than-zero</validate>
+                    <comment><![CDATA[
+                        How many recent days the nightly rollup recomputes. Events arrive through
+                        a queue, so a visit at 23:59 can be consumed after the 02:00 run &mdash;
+                        re-sweeping recent days picks those up. The rollup REPLACES each day it
+                        recomputes rather than adding to it, so a wider window costs time but can
+                        never double-count.
+                    ]]></comment>
+                </field>
+                <field id="debug_logging" translate="label" type="select" sortOrder="35" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Beacon Console Logging</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment><![CDATA[
+                        Makes the storefront beacon narrate every decision to the browser console:
+                        which event type it chose and why, consent and cookie state, each
+                        checkout step it detects, and whether each request was sent, deduplicated
+                        or suppressed. <b>Leave this off in production</b> &mdash; it is a
+                        diagnostic, not a feature.<br/>
+                        You can also switch it on for one browsing session, without touching this
+                        setting, by adding <code>?adsanalytics_debug=1</code> to any storefront
+                        URL. That survives navigation, so it stays on through a whole
+                        landing &rarr; cart &rarr; checkout walkthrough. Turn it back off with
+                        <code>?adsanalytics_debug=0</code>.
+                    ]]></comment>
+                </field>
                 <field id="sampling_rate" translate="label" type="text" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="0">
                     <label>Sampling Rate (%)</label>
                     <validate>validate-digits validate-range range-1-100</validate>

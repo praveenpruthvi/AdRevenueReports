@@ -81,7 +81,50 @@ class EventIngestService implements EventIngestInterface
         $this->logger = $logger;
     }
 
+    /**
+     * Event types that may ONLY be raised server-side, never accepted from a
+     * client (docs/SECURITY.md §3).
+     *
+     * `order_placed` carries the order id and is what creates an
+     * ads_analytics_order_attribution row. Accepting it over the public
+     * endpoint would let anyone POST {"event_type":"order_placed",
+     * "entity_id":<someone else's order>} and attribute that order — and its
+     * revenue — to their own visit. `add_to_cart` is listed too: the module
+     * raises it from the cart observer, so a client-sent one could only ever
+     * inflate the funnel.
+     *
+     * Both reach the queue through ingestFromServer() instead, which is not
+     * part of the webapi contract and is therefore unreachable from outside.
+     */
+    private const SERVER_ONLY_EVENT_TYPES = ['order_placed', 'add_to_cart'];
+
+    /**
+     * Public webapi entry point. Anything arriving here is untrusted.
+     */
     public function ingest(EventInterface $event): void
+    {
+        if (in_array($event->getEventType(), self::SERVER_ONLY_EVENT_TYPES, true)) {
+            // Dropped silently, like every other rejection on this endpoint —
+            // telling a caller which event types are privileged just tells it
+            // what to probe for next.
+            return;
+        }
+
+        $this->process($event);
+    }
+
+    /**
+     * Trusted entry point for this module's own observers
+     * (Model\Service\ServerEventDispatcher). Deliberately NOT on
+     * Api\EventIngestInterface, so etc/webapi.xml cannot expose it and no
+     * client can reach it.
+     */
+    public function ingestFromServer(EventInterface $event): void
+    {
+        $this->process($event);
+    }
+
+    private function process(EventInterface $event): void
     {
         if (!$this->config->isEnabled()) {
             return;

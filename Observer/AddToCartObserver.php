@@ -3,24 +3,60 @@ declare(strict_types=1);
 
 namespace Aavirbhava\AdsAnalytics\Observer;
 
+use Aavirbhava\AdsAnalytics\Model\Service\ServerEventDispatcher;
 use Magento\Framework\Event\Observer as EventObserver;
 use Magento\Framework\Event\ObserverInterface;
 
 /**
  * P2-T2: checkout_cart_product_add_after -> add_to_cart funnel event.
- * Must not write to the DB synchronously here (CLAUDE.md async-first rule) —
- * publish to the same queue used by the frontend beacon instead, so this
- * event lands through the identical EventConsumer path.
+ *
+ * Emitted server-side rather than from the beacon because add-to-cart can
+ * happen without a page load the beacon would see — an AJAX add from a
+ * category page, a grouped/configurable product, a re-order. Observing the
+ * cart is the only way to catch all of them.
+ *
+ * There is no double-counting risk: the beacon sends landing/product_view
+ * only and never emits add_to_cart.
+ *
+ * Writes nothing itself. It hands the event to ServerEventDispatcher, which
+ * routes it through the normal ingest path so it stays off the request's DB
+ * budget (CLAUDE.md #3).
  */
 class AddToCartObserver implements ObserverInterface
 {
+    private ServerEventDispatcher $dispatcher;
+
+    public function __construct(ServerEventDispatcher $dispatcher)
+    {
+        $this->dispatcher = $dispatcher;
+    }
+
     public function execute(EventObserver $observer): void
     {
-        // TODO(P2-T2): resolve the current visitor_uuid (from the cookie via
-        // the request), build an Api\Data\EventInterface with
-        // event_type=add_to_cart and the added product's entity_id, and
-        // publish it via the "aavirbhava.adsanalytics.event" topic — do not
-        // call EventIngestService/EventConsumer methods directly, publish
-        // exactly like the frontend beacon does, to keep one single path.
+        $productId = $this->resolveProductId($observer);
+
+        $this->dispatcher->dispatch('add_to_cart', $productId);
+    }
+
+    /**
+     * Prefer the quote item's product id over the event's `product`: for a
+     * configurable product the event carries the parent, while the quote item
+     * knows what actually went in the cart. Falls back to the product, then
+     * to null — entity_id is nullable and a missing id must not cost us the
+     * event.
+     */
+    private function resolveProductId(EventObserver $observer): ?int
+    {
+        $quoteItem = $observer->getEvent()->getData('quote_item');
+        if ($quoteItem !== null && method_exists($quoteItem, 'getProductId') && $quoteItem->getProductId()) {
+            return (int)$quoteItem->getProductId();
+        }
+
+        $product = $observer->getEvent()->getData('product');
+        if ($product !== null && method_exists($product, 'getId') && $product->getId()) {
+            return (int)$product->getId();
+        }
+
+        return null;
     }
 }
