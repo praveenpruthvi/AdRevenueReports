@@ -4,7 +4,7 @@ Update this file in place after every work session. It's a current-state snapsho
 
 **Last updated:** 2026-09-19
 **Current phase:** Phase 3 complete; Phase 4 (export + ad-spend/ROAS) not yet started
-**Current task:** Phases 1, 2 and 3 are all complete and verified against real data. The capture pipeline runs end to end in a real browser; a nightly cron rolls raw events into `ads_analytics_daily_summary`; the admin report page renders Chart.js funnel and traffic-type charts above a filterable grid that reads only from that summary; and a retention purge removes raw per-visitor data on its own configurable window. The summary has been reconciled exactly against both the raw tables (P3-T6) and a seeded simulator run (P3-T8). `product_views` has since been added to the summary and the report (see below), amending SPECS §3. Next: **Phase 4** — Excel/PDF export, `Api/AdSpendProviderInterface`, and ROAS.
+**Current task:** Phases 1, 2 and 3 are complete. Phase 4 started: **P4-T3/T4 done** — `Model\AdSpendProvider\CsvAdSpendProvider` is a real, working ad-spend provider registered for `google` and `meta`, proving the `AdSpendProviderInterface` extension point works. Next: **P4-T1/T2** (Excel/PDF export) or **P4-T5** (ROAS calculation, now unblocked since spend data exists).
 
 ## Phase status
 | Phase | Status |
@@ -12,7 +12,7 @@ Update this file in place after every work session. It's a current-state snapsho
 | 1 — Scaffold + capture layer | **Complete (15/15)** — verified end to end in a real browser, reconciled exactly against a 300-visitor simulation, 104 unit + 26 integration tests green |
 | 2 — Funnel events + order attribution | **Complete (7/7)** — LUMA checkout adapter shipped, Hyvä left as a documented drop-in; full funnel `add_to_cart → checkout_start → checkout_step_shipping → checkout_step_payment → order_placed` confirmed live |
 | 3 — Aggregation + admin reporting | **Complete (8/8)** — nightly rollup + admin charts/grid, retention purge, summary reconciled exactly against both raw data and a seeded simulator run |
-| 4 — Export + ad-spend/ROAS | Not Started |
+| 4 — Export + ad-spend/ROAS | In Progress (2/7) — T3, T4 done |
 
 ## Open decisions / blockers
 _(none — the checkout-type decision was resolved 2026-09-19; see CLAUDE.md §Resolved decisions)_
@@ -71,6 +71,28 @@ Two details in the filter worth not "simplifying" later:
 - Validity is checked by asking MySQL (`SELECT ? REGEXP ?`), not `preg_match`. They are different engines, so a pattern PCRE accepts can still be rejected by the database, and the database is the only opinion that matters. An invalid pattern falls back to a literal match rather than erroring, because a half-typed expression is the normal state of a filter box; MySQL would otherwise raise 1139 and the grid would render as a failed request.
 
 **Verified** against seven beacon-realistic landings. Classification came out `paid` / `paid` / `paid` / `referral` / `referral` / `organic` / `direct`, and the log immediately surfaced genuine gaps: `twclid` and `mc_cid` URLs landing as `referral`, and `li_fat_id` / `epik` classified paid only via their medium with no platform recognised. Filters behaved exactly as intended — `gclid` → 1, `[?&][a-z_]*clid=` → 2, `[?&]utm_medium=(cpc|paid)` → 3, `twclid|epik|li_fat_id|mc_cid` → 4, invalid `utm_(` → 0 rows and no error, `%20` → correctly matched a percent-encoded URL. Other columns unaffected. Reflection on `Api\Data\EventInterface` passes on all 30 methods, so the new accessor cannot 500 the webapi. 137 unit tests green.
+
+### P4-T3/T4 complete — the ad-spend extension point, proven with a real provider (2026-09-19)
+`Api/AdSpendProviderInterface` and `Model\AdSpendProviderPool` already existed from the Phase 1 scaffold, with test coverage in place — P4-T3's remaining work was confirming they hold up as the contract P4-T4 builds against, which they did unchanged.
+
+**P4-T4 built `Model\AdSpendProvider\CsvAdSpendProvider`**, reading `var/aavirbhava/adsanalytics/adspend/<platform_code>.csv` (columns: date, campaign, spend). Registered in this module's own `etc/di.xml` for both `google` and `meta`, against the **same class**. That is deliberate, not a shortcut: `platform_code` arrives as a `getSpend()` argument rather than a constructor one, so one generic, credential-free class can serve any number of platforms — adding CSV spend for a sixth platform is a `di.xml` line and a file drop, never a new PHP class. That is CLAUDE.md #2 ("no platform-specific code") demonstrated for spend data, not just asserted.
+
+**Why CSV rather than a live Google Ads / Meta Ads API call.** Both require OAuth app registration and an approved developer account this environment does not have — the same reasoning already applied to Hyvä checkout (build the free path, document the extension point, see the 2026-09-19 resolved decision in CLAUDE.md). A real `GoogleAdsProvider` would implement the identical interface, call the platform's reporting API instead of reading a file, and store its credentials via `Magento\Config\Model\Config\Backend\Encrypted` per docs/SECURITY.md §10 (P4-T6). This class needs no credentials at all, which is also why it is safe to ship registered by default rather than commented out.
+
+**Two failure modes handled deliberately, not incidentally:**
+- **A missing file is "no data," not an error.** A platform can legitimately have no spend recorded yet (`bing`/`tiktok`/`reddit` have neither a registered provider nor a file, by design). P4-T5's ROAS view must render "no data" for a platform rather than an exception breaking the whole dashboard over one absent CSV.
+- **A malformed row is skipped and logged, not thrown.** A merchant hand-editing a CSV will eventually introduce a typo — a non-numeric spend, an impossible calendar date, an empty campaign, a short row. `parseRow()` validates each field and logs a warning with the exact line number and reason, so one bad line cannot blank out the rest of a file with real numbers in it. Validating the date is subtler than it looks: `DateTime::createFromFormat('Y-m-d', ...)` is lenient about overflow — `2026-02-30` silently becomes March 2nd rather than failing — so catching an invalid date needs the round-trip `format() !== $rawDate` check, not just a non-`false` check on the parse.
+
+**Verified**, with a deterministic seeded dataset (values derived from `crc32(date|campaign)`, not `rand()`, so re-seeding cannot rewrite history a prior run's verification depended on): `google.csv` — a full week, all 5 campaigns, no gaps, plus one deliberately malformed spend value; `meta.csv` — only 4 of 5 campaigns and a missing day, plus one deliberately malformed date; `bing`/`tiktok`/`reddit` — no file at all.
+- Pool resolves `google`/`meta`; correctly throws `NoSuchEntityException` for an unregistered platform (`bing`).
+- `getSpend()` returns 35 rows for google (36 minus the malformed one), correct per-campaign totals; 24 rows for meta reflecting both the excluded campaign and the missing day; a narrower 2-day range returns exactly the 10 rows it should.
+- Date-range bounds are inclusive on both ends (unit test).
+- A registered platform with no file at all (distinct from an unregistered platform) returns `[]`, not an exception.
+- A path-traversal platform code (`../../../../etc/passwd`) resolves to "no file" rather than escaping `var/`.
+- All 6 malformed-row cases (bad spend, negative spend, invalid calendar date, unparsable date, empty campaign, too few columns) are individually covered in unit tests, each asserting the surrounding good rows survive.
+- 12 new unit tests, 156 total green, 0 phpcs errors.
+
+Test data is seeded directly into `var/aavirbhava/adsanalytics/adspend/`, not shipped in the module — same convention as the traffic simulator's data being generated rather than fixtures committed to the repo.
 
 ### Three admin-UI fixes found by inspection (2026-09-19)
 

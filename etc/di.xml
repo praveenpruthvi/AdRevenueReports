@@ -7,11 +7,23 @@
         A client project adds a new ad-spend provider (e.g. Reddit, Pinterest)
         by adding an <item> here in ITS OWN di.xml — never edit this array
         in this module's core to add a platform.
+
+        google and meta are registered against the SAME class,
+        Model\AdSpendProvider\CsvAdSpendProvider, which is the point:
+        platform_code arrives as a getSpend() argument, not a constructor
+        one, so one generic, credential-free implementation serves every
+        platform that has not been given a real API-backed provider. A
+        deployment with real Google Ads / Meta Ads API access replaces either
+        line with its own provider class in ITS OWN di.xml (P4-T6 covers
+        storing that provider's credentials); until then, both platforms read
+        var/aavirbhava/adsanalytics/adspend/<platform_code>.csv, and simply
+        have no data if that file does not exist.
     -->
     <type name="Aavirbhava\AdsAnalytics\Model\AdSpendProviderPool">
         <arguments>
             <argument name="providers" xsi:type="array">
-                <!-- <item name="google" xsi:type="object">Aavirbhava\AdsAnalytics\Model\AdSpendProvider\GoogleAdsProvider</item> -->
+                <item name="google" xsi:type="object">Aavirbhava\AdsAnalytics\Model\AdSpendProvider\CsvAdSpendProvider</item>
+                <item name="meta" xsi:type="object">Aavirbhava\AdsAnalytics\Model\AdSpendProvider\CsvAdSpendProvider</item>
             </argument>
         </arguments>
     </type>
