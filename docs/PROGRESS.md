@@ -4,7 +4,7 @@ Update this file in place after every work session. It's a current-state snapsho
 
 **Last updated:** 2026-09-20
 **Current phase:** Phase 3 complete; Phase 4 complete, including a post-completion follow-up (ad-spend CSV upload)
-**Current task:** Phases 1 through 4 are all complete. After P4-T7's regression, two more rounds of direct feedback landed: the admin config page's help text was rewritten to remove every developer-only reference (doc paths, class names) an admin user has no way to open, and — after the user pushed back on "no config page, file-drop only" for ad spend — a proper upload form was added so an admin without server filesystem access can still feed the ROAS report (P4-T4b in TASKS.md). Everything is green: 233 unit tests, 0 phpcs errors, 0 real phpstan findings. Phase 5 (access-log simulator page) remains deferred by request, with its design questions still open.
+**Current task:** Phases 1 through 4 are all complete and the README was brought up to date to match (it previously still described a "structural scaffold," left over from before Phase 1 began). 238 unit tests green, 0 phpcs errors, 0 real phpstan findings. Phase 5 (access-log analysis page) is planned in detail in `docs/TASKS.md` but deliberately not implemented — the user will build it on another machine against real log data. Nothing further is pending in this environment unless the user asks for one of the two still-open smaller items noted in "Open decisions / blockers" below, or for Phase 5's remaining design questions to be resolved.
 
 ## Phase status
 | Phase | Status |
@@ -13,10 +13,14 @@ Update this file in place after every work session. It's a current-state snapsho
 | 2 — Funnel events + order attribution | **Complete (7/7)** — LUMA checkout adapter shipped, Hyvä left as a documented drop-in; full funnel `add_to_cart → checkout_start → checkout_step_shipping → checkout_step_payment → order_placed` confirmed live |
 | 3 — Aggregation + admin reporting | **Complete (8/8)** — nightly rollup + admin charts/grid, retention purge, summary reconciled exactly against both raw data and a seeded simulator run |
 | 4 — Export + ad-spend/ROAS | **Complete (7/7)** — export, PDF, ad-spend provider, ROAS, credential pattern, full regression all done and green |
-| 5 — Access-log simulator page (new, requested 2026-09-19) | Deferred — requirements captured in TASKS.md, explicitly to start only after Phase 4 |
+| 5 — Access-log analysis page (requested 2026-09-19, plan refined 2026-09-20) | Deferred — plan only, no code. Implementation deliberately left for another machine/session, against real log data. Biggest change from the original sketch: no persistence at all (no table, no cron), and a generic admin-described delimiter + URL-column + status-column parser instead of a fixed Apache/Nginx format. "How is a visitor identified" is the one still-open question that most needs an answer before P5-T2 can start — see docs/TASKS.md |
 
 ## Open decisions / blockers
-_(none — the checkout-type decision was resolved 2026-09-19; see CLAUDE.md §Resolved decisions)_
+Nothing is BLOCKED. Two optional, non-blocking items the user has flagged interest in but not yet asked for:
+- **Config gaps the Request Log surfaced:** `twclid` (Twitter/X), `mc_cid` (email/newsletter), `li_fat_id` (LinkedIn) and `epik` (Pinterest) are not in the default "Paid Platform / Click-ID Map", so traffic carrying them is not recognised as paid by platform; and `social`/`email` are not in the default paid-mediums list. These are config additions, not code changes — say the word.
+- **A broker-outage health indicator.** Documented as a limitation in README.md; no admin-visible signal exists today beyond the system log. Not built.
+
+(The checkout-type decision was resolved 2026-09-19; see CLAUDE.md §Resolved decisions.)
 
 ## Completed
 - Full architecture/scaffold for Phase 1–4: module structure, `etc/*` config, five-table schema, webapi/queue wiring, admin menu/config, Hyvä-safe beacon skeleton.
