@@ -31,6 +31,9 @@ use Psr\Log\LoggerInterface;
 class RequestLogWriter
 {
     private const ENDPOINT = '/V1/adsanalytics/event';
+    
+    /** Matches ads_analytics_request_log.page_url width (etc/db_schema.xml). */
+    private const MAX_PAGE_URL_LENGTH = 2048;
     private const MAX_REJECTION_REASON = 255;
 
     private RequestLogFactory $requestLogFactory;
@@ -71,6 +74,7 @@ class RequestLogWriter
                 'visitor_uuid' => $this->nullIfBlank($event->getVisitorUuid()),
                 'ip_hash' => $event->getIpHash(),
                 'user_agent' => $event->getUserAgent(),
+                'page_url' => $this->truncate($event->getPageUrl(), self::MAX_PAGE_URL_LENGTH),
             ]);
             $this->requestLogResource->save($log);
 
@@ -87,7 +91,12 @@ class RequestLogWriter
         $this->finalise($logId, ValidationStatus::REJECTED, $reason);
     }
 
-    public function markAccepted(?int $logId): void
+    /**
+     * @param string|null $trafficType the type TrafficResolver decided, for a
+     *                                 landing; null for any other event,
+     *                                 which is never classified
+     */
+    public function markAccepted(?int $logId, ?string $trafficType = null): void
     {
         if ($logId === null) {
             return;
@@ -102,10 +111,10 @@ class RequestLogWriter
             return;
         }
 
-        $this->finalise($logId, ValidationStatus::ACCEPTED, null);
+        $this->finalise($logId, ValidationStatus::ACCEPTED, null, $trafficType);
     }
 
-    private function finalise(?int $logId, string $status, ?string $reason): void
+    private function finalise(?int $logId, string $status, ?string $reason, ?string $trafficType = null): void
     {
         if ($logId === null) {
             return;
@@ -118,6 +127,9 @@ class RequestLogWriter
                 return;
             }
             $log->setData('validation_status', $status);
+            if ($trafficType !== null) {
+                $log->setData('traffic_type', $trafficType);
+            }
             $log->setData(
                 'rejection_reason',
                 $reason !== null ? mb_substr($reason, 0, self::MAX_REJECTION_REASON) : null
@@ -155,9 +167,22 @@ class RequestLogWriter
             'utm_campaign' => $event->getUtmCampaign(),
             'referrer' => $event->getReferrer(),
             'landing_page' => $event->getLandingPage(),
+            'page_url' => $event->getPageUrl(),
             'entity_id' => $event->getEntityId(),
             'timestamp' => $event->getTimestamp(),
         ], static fn ($v): bool => $v !== null && $v !== '');
+    }
+
+    /**
+     * Truncates rather than rejects. An over-long URL is exactly the kind of
+     * request worth seeing in the log, so storing a clipped one beats
+     * dropping the row or letting the insert fail on column width.
+     */
+    private function truncate(?string $value, int $max): ?string
+    {
+        $value = $value !== null ? trim($value) : '';
+
+        return $value !== '' ? mb_substr($value, 0, $max) : null;
     }
 
     private function nullIfBlank(?string $value): ?string

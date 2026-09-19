@@ -27,6 +27,7 @@ interface EventInterface
     public const IP_HASH = 'ip_hash';
     public const USER_AGENT = 'user_agent';
     public const LANDING_PAGE = 'landing_page';
+    public const PAGE_URL = 'page_url';
     public const ENTITY_ID = 'entity_id';
     public const TIMESTAMP = 'timestamp';
 
@@ -187,6 +188,27 @@ interface EventInterface
      * @return $this
      */
     public function setLandingPage(?string $landingPage): self;
+
+    /**
+     * The full URL of the page that raised this event, query string included.
+     *
+     * Distinct from getLandingPage(), which is the PATH only and is sent just
+     * on a landing. This is sent on every event and keeps the query string,
+     * because the query string is the whole point: it is the only place a
+     * click id or a utm parameter the module does not yet recognise is
+     * visible. It is stored ONLY on ads_analytics_request_log — the
+     * debugging surface with its own short retention — and never reaches the
+     * visit, funnel or summary tables.
+     *
+     * @return string|null
+     */
+    public function getPageUrl(): ?string;
+
+    /**
+     * @param string|null $pageUrl
+     * @return $this
+     */
+    public function setPageUrl(?string $pageUrl): self;
 
     /**
      * @return int|null

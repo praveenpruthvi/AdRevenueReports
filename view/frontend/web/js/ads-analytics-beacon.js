@@ -209,6 +209,28 @@
         return null;
     }
 
+    /**
+     * The full current URL, query string included, capped at the width of
+     * ads_analytics_request_log.page_url.
+     *
+     * Sent on EVERY event, not just the landing, and deliberately NOT
+     * stripped of its query string. landing_page carries the path for
+     * analytics; this carries the whole URL purely so the request log can
+     * show what actually arrived — an unrecognised click-id or utm parameter
+     * exists nowhere else, because the classifier keeps only what it knows.
+     * The hash is kept too, since checkout steps are identified from it.
+     *
+     * The server stores this only on the request log, which has its own
+     * short retention (docs/SECURITY.md sections 6 and 8).
+     */
+    function currentPageUrl() {
+        try {
+            return String(location.href).slice(0, 2048);
+        } catch (e) {
+            return null;
+        }
+    }
+
     function sendEvent(payload) {
         log('POST ' + payload.event_type + ' ->', payload);
         try {
@@ -286,6 +308,7 @@
         var payload = {
             visitor_uuid: resolveVisitorUuid().uuid,
             event_type: eventType,
+            page_url: currentPageUrl(),
             timestamp: new Date().toISOString()
         };
         if (extra) {
@@ -351,6 +374,7 @@
             visitor_uuid: visitorUuid,
             event_type: eventType,
             landing_page: location.pathname,
+            page_url: currentPageUrl(),
             timestamp: new Date().toISOString()
         };
 

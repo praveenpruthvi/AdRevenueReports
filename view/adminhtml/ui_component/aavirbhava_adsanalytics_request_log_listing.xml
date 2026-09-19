@@ -123,6 +123,44 @@
             </settings>
         </column>
 
+        <!--
+            The reason this grid is worth looking at. Shows the full arriving
+            URL, query string included, so a click-id or utm parameter the
+            module does not recognise is visible — it appears nowhere else,
+            because the classifier keeps only what it understands.
+
+            Its filter is a REGULAR EXPRESSION, applied by
+            Model\ResourceModel\RequestLog\Grid\Collection, not the stock
+            LIKE. A plain keyword still works as a substring match, so the
+            ordinary case is unaffected; anything more is expressible too, for
+            example:
+              [?&]utm_source=            any URL carrying a utm_source
+              [?&][a-z_]*clid=           any click-id style parameter
+              [?&]utm_source=(?!google|bing)  a source outside the known set
+            An unparseable pattern falls back to a literal match rather than
+            erroring, so a half-typed expression does not break the grid.
+        -->
+        <column name="page_url" sortOrder="55">
+            <settings>
+                <filter>text</filter>
+                <label translate="true">Page URL (regex filter)</label>
+            </settings>
+        </column>
+
+        <!--
+            What TrafficResolver actually decided for a landing. Paired with
+            the URL beside it this is the misclassification check: a row whose
+            URL carries campaign parameters but whose traffic type is
+            'direct' is a source the module does not yet handle. Empty for
+            non-landing events, which are never classified.
+        -->
+        <column name="traffic_type" sortOrder="57">
+            <settings>
+                <filter>text</filter>
+                <label translate="true">Resolved Traffic Type</label>
+            </settings>
+        </column>
+
         <column name="endpoint" sortOrder="60">
             <settings>
                 <filter>text</filter>

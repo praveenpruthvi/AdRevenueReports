@@ -142,6 +142,14 @@ Every hit to the ingest endpoint gets logged by `Model\Queue\EventConsumer` — 
 - Admin: read-only grid (built alongside the Phase 3 admin controller — see `docs/TASKS.md`), filterable by `validation_status`, date range, `visitor_uuid`; raw payload viewable per row. Until Phase 3's admin UI exists, query the table directly for debugging.
 - Same escaping/output rules as the analytics grids apply here — `raw_payload` is attacker-controllable text (see docs/SECURITY.md).
 
+**`page_url` and `traffic_type` (added after Phase 3).** The log previously recorded `endpoint` (always `/V1/adsanalytics/event`) and the parsed payload fields, which meant a click-id or utm parameter the module does not recognise was invisible: `TrafficResolver` keeps only what it understands, and `ads_analytics_visit.landing_page` stores the path without the query string. `page_url` carries the full arriving URL, query string and fragment included, sent on every event by the beacon; `traffic_type` records what the resolver actually decided for a landing.
+
+Together they make misclassification directly visible: a row whose URL carries campaign parameters but whose resolved type is `direct`, or one carrying an unknown `*clid=` parameter, is a source that needs adding to the platform map or the paid-medium list in configuration.
+
+Both live **only on this table**. A query string is arbitrary caller-supplied text and can carry personal data such as a search term, so it stays on the debugging surface that already holds raw payloads and is purged on the short retention window (docs/SECURITY.md sections 6 and 8). It must not be copied into the visit, funnel or summary tables.
+
+The admin grid filters `page_url` as a **MySQL regular expression** rather than a LIKE. A plain keyword still behaves as a substring match, so the ordinary case is unchanged, but it also allows questions a LIKE cannot express — `[?&][a-z_]*clid=` for any click-id style parameter, `[?&]utm_medium=(cpc|paid)` for paid mediums, `twclid|epik|li_fat_id` for a specific set of unhandled ones. An unparseable pattern falls back to a literal match instead of erroring, because a half-typed expression is the normal state of a filter box.
+
 ## 10. Privacy/compliance notes
 - Visitor cookie is anonymous until an order links it to `customer_id`/order — no email/name stored pre-conversion.
 - `referrer` is truncated to hostname only before storage (never the full URL with path/query) — see `docs/SECURITY.md` for why.

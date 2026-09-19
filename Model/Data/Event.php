@@ -128,6 +128,16 @@ class Event extends DataObject implements EventInterface
         return $this->setData(self::LANDING_PAGE, $landingPage);
     }
 
+    public function getPageUrl(): ?string
+    {
+        return $this->_getData(self::PAGE_URL);
+    }
+
+    public function setPageUrl(?string $pageUrl): self
+    {
+        return $this->setData(self::PAGE_URL, $pageUrl);
+    }
+
     public function getEntityId(): ?int
     {
         $value = $this->_getData(self::ENTITY_ID);

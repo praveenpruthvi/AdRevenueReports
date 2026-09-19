@@ -79,8 +79,11 @@ class EventConsumer
                 return;
             }
 
-            $this->persist($event);
-            $this->requestLogWriter->markAccepted($logId);
+            // The resolved traffic type is handed to the log row so that a
+            // misclassification is visible beside the URL that produced it:
+            // query parameters present but traffic_type 'direct' is the
+            // signature of a source the module does not yet handle.
+            $this->requestLogWriter->markAccepted($logId, $this->persist($event));
         } catch (\Throwable $e) {
             $this->requestLogWriter->markRejected($logId, 'consumer error: ' . $e->getMessage());
             $this->logger->error(
@@ -94,11 +97,17 @@ class EventConsumer
         }
     }
 
-    private function persist(EventInterface $event): void
+    /**
+     * @return string|null the resolved traffic type for a landing; null for
+     *                     any other event, which is never classified
+     */
+    private function persist(EventInterface $event): ?string
     {
         if ($this->validator->isLanding($event)) {
-            $this->visitManager->upsertLanding($event, $this->classify($event));
-            return;
+            $classification = $this->classify($event);
+            $this->visitManager->upsertLanding($event, $classification);
+
+            return $classification['traffic_type'];
         }
 
         $visit = $this->visitManager->resolveOrCreateVisit($event->getVisitorUuid());
@@ -111,6 +120,8 @@ class EventConsumer
             $this->attributionWriter->write((int)$event->getEntityId(), $visit);
             $this->visitManager->markConverted($visit);
         }
+
+        return null;
     }
 
     /**

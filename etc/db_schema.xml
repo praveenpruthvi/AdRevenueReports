@@ -162,6 +162,30 @@
         <column xsi:type="varchar" name="visitor_uuid" nullable="true" length="64" comment="Visitor UUID (when parseable)"/>
         <column xsi:type="varchar" name="ip_hash" nullable="true" length="64" comment="Hashed IP (never raw, see docs/SECURITY.md)"/>
         <column xsi:type="varchar" name="user_agent" nullable="true" length="255" comment="User Agent (truncated)"/>
+        <!--
+            The full request URL including its query string. This is the one
+            field that makes the log useful for finding traffic the module
+            does not yet classify: an unrecognised click-id or utm parameter
+            is invisible everywhere else, because TrafficResolver only keeps
+            what it understands and ads_analytics_visit.landing_page stores
+            the path without the query.
+
+            It lives ONLY on this table. That is deliberate: a query string is
+            arbitrary caller-supplied text and can carry personal data such as
+            a search term, so it is confined to the debugging surface that
+            already holds raw payloads and is purged on the short retention
+            window (docs/SECURITY.md sections 6 and 8), and never reaches the
+            visit, funnel or summary tables.
+        -->
+        <column xsi:type="varchar" name="page_url" nullable="true" length="2048" comment="Full Request URL Including Query String"/>
+        <!--
+            The traffic type TrafficResolver actually decided, stored on
+            accepted landings so a misclassification is visible next to the
+            URL that caused it — a row with query parameters but traffic_type
+            'direct' is the signature of a source the module does not handle.
+            Null for non-landing events, which are never classified.
+        -->
+        <column xsi:type="varchar" name="traffic_type" nullable="true" length="16" comment="Resolved Traffic Type (landing events only)"/>
         <column xsi:type="varchar" name="queue_message_id" nullable="true" length="64" comment="Queue Message ID (set once enqueued)"/>
         <constraint xsi:type="primary" referenceId="PRIMARY">
             <column name="log_id"/>
