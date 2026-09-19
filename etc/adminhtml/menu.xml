@@ -1,0 +1,53 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Backend:etc/menu.xsd">
+    <menu>
+        <!--
+            Group heading for this module's reports, matching the pattern
+            already established in Aavirbhava_SalesAnalytics' menu.xml.
+
+            A menu node with NO `action` is what Magento renders as a COLUMN
+            TITLE in the Reports mega-menu — that is how core's own "Sales",
+            "Customers", "Products" and "Statistics" groups are declared.
+            Previously both entries below were direct children of
+            Magento_Reports::report *with* an action, so they rendered as two
+            loose, unrelated links with no heading: "Ads Analytics" landed
+            mid-way down the Marketing column between "Newsletter Problem
+            Reports" and "Reviews", and "Ads Analytics Request Log" was
+            stranded at the bottom of that same column, nowhere near it.
+
+            `resource` uses this module's own Aavirbhava_AdsAnalytics::report,
+            which etc/acl.xml already declares as the parent of the dashboard
+            and request_log resources — so any role that can see either child
+            can see the heading, and no role permissions change.
+
+            sortOrder 66 puts this column immediately after Sales Analytics
+            (65), keeping the two sibling modules adjacent.
+        -->
+        <add id="Aavirbhava_AdsAnalytics::report_group"
+             title="Ads Analytics"
+             translate="title"
+             module="Aavirbhava_AdsAnalytics"
+             sortOrder="66"
+             parent="Magento_Reports::report"
+             resource="Aavirbhava_AdsAnalytics::report"/>
+
+        <add id="Aavirbhava_AdsAnalytics::dashboard"
+             title="Dashboard"
+             translate="title"
+             module="Aavirbhava_AdsAnalytics"
+             sortOrder="10"
+             parent="Aavirbhava_AdsAnalytics::report_group"
+             action="ads_analytics/report/index"
+             resource="Aavirbhava_AdsAnalytics::dashboard"/>
+
+        <add id="Aavirbhava_AdsAnalytics::request_log"
+             title="Request Log"
+             translate="title"
+             module="Aavirbhava_AdsAnalytics"
+             sortOrder="20"
+             parent="Aavirbhava_AdsAnalytics::report_group"
+             action="ads_analytics/requestlog/index"
+             resource="Aavirbhava_AdsAnalytics::request_log"/>
+    </menu>
+</config>

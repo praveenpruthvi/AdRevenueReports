@@ -1,0 +1,9 @@
+# This repo is the module itself; nothing here is generated or installed.
+# Entries exist only to keep editor/OS cruft out.
+.idea/
+.vscode/
+*.swp
+*~
+.DS_Store
+__pycache__/
+*.pyc

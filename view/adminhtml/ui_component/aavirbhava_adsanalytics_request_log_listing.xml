@@ -1,0 +1,171 @@
+<?xml version="1.0"?>
+<!--
+    P3-T5b — read-only Request Log grid (docs/SPECS.md §9).
+
+    SECURITY: raw_payload and user_agent are attacker-controllable text,
+    logged BEFORE validation precisely so hostile input is visible
+    (docs/SECURITY.md §2). Every column here uses the stock `text` component,
+    which escapes on output. Do NOT swap any of them for a renderer that
+    emits raw HTML, and do not add an html/rawHtml column for raw_payload —
+    that would turn the debugging surface into a stored-XSS vector against
+    the admin.
+
+    There are deliberately no mass actions, no inline editing and no delete:
+    this grid is evidence, not data to manage. Rows leave only via the
+    retention purge (P3-T7).
+-->
+<listing xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Ui:etc/ui_configuration.xsd">
+    <argument name="data" xsi:type="array">
+        <item name="js_config" xsi:type="array">
+            <item name="provider" xsi:type="string">aavirbhava_adsanalytics_request_log_listing.aavirbhava_adsanalytics_request_log_listing_data_source</item>
+        </item>
+    </argument>
+    <settings>
+        <spinner>aavirbhava_adsanalytics_request_log_columns</spinner>
+        <deps>
+            <dep>aavirbhava_adsanalytics_request_log_listing.aavirbhava_adsanalytics_request_log_listing_data_source</dep>
+        </deps>
+    </settings>
+
+    <dataSource name="aavirbhava_adsanalytics_request_log_listing_data_source"
+                component="Magento_Ui/js/grid/provider">
+        <settings>
+            <storageConfig>
+                <param name="indexField" xsi:type="string">log_id</param>
+            </storageConfig>
+            <updateUrl path="mui/index/render"/>
+        </settings>
+        <aclResource>Aavirbhava_AdsAnalytics::request_log</aclResource>
+        <dataProvider class="Magento\Framework\View\Element\UiComponent\DataProvider\DataProvider"
+                      name="aavirbhava_adsanalytics_request_log_listing_data_source">
+            <settings>
+                <requestFieldName>log_id</requestFieldName>
+                <primaryFieldName>log_id</primaryFieldName>
+            </settings>
+        </dataProvider>
+    </dataSource>
+
+    <listingToolbar name="listing_top">
+        <settings>
+            <sticky>true</sticky>
+        </settings>
+        <bookmark name="bookmarks"/>
+        <columnsControls name="columns_controls"/>
+        <filterSearch name="fulltext"/>
+        <filters name="listing_filters">
+            <settings>
+                <templates>
+                    <filters>
+                        <select>
+                            <param name="template" xsi:type="string">ui/grid/filters/elements/ui-select</param>
+                            <param name="component" xsi:type="string">Magento_Ui/js/form/element/ui-select</param>
+                        </select>
+                    </filters>
+                </templates>
+            </settings>
+        </filters>
+        <paging name="listing_paging"/>
+    </listingToolbar>
+
+    <columns name="aavirbhava_adsanalytics_request_log_columns">
+        <settings>
+            <childDefaults>
+                <param name="fieldAction" xsi:type="array">
+                    <item name="provider" xsi:type="string">aavirbhava_adsanalytics_request_log_listing.aavirbhava_adsanalytics_request_log_listing.aavirbhava_adsanalytics_request_log_columns</item>
+                </param>
+            </childDefaults>
+        </settings>
+
+        <column name="log_id" sortOrder="10">
+            <settings>
+                <filter>textRange</filter>
+                <label translate="true">ID</label>
+                <resizeEnabled>false</resizeEnabled>
+            </settings>
+        </column>
+
+        <column name="received_at" class="Magento\Ui\Component\Listing\Columns\Date"
+                component="Magento_Ui/js/grid/columns/date" sortOrder="20">
+            <settings>
+                <filter>dateRange</filter>
+                <dataType>date</dataType>
+                <label translate="true">Received At</label>
+            </settings>
+        </column>
+
+        <!--
+            Filterable by validation_status per SPECS.md §9. 'pending' is in
+            the option list on purpose: a row stuck at pending means the
+            consumer died mid-message, which is exactly the kind of thing
+            this grid exists to make visible.
+        -->
+        <column name="validation_status" component="Magento_Ui/js/grid/columns/select" sortOrder="30">
+            <settings>
+                <filter>select</filter>
+                <options class="Aavirbhava\AdsAnalytics\Model\Config\Source\ValidationStatus"/>
+                <dataType>select</dataType>
+                <label translate="true">Status</label>
+            </settings>
+        </column>
+
+        <column name="rejection_reason" sortOrder="40">
+            <settings>
+                <filter>text</filter>
+                <label translate="true">Rejection Reason</label>
+            </settings>
+        </column>
+
+        <column name="visitor_uuid" sortOrder="50">
+            <settings>
+                <filter>text</filter>
+                <label translate="true">Visitor UUID</label>
+            </settings>
+        </column>
+
+        <column name="endpoint" sortOrder="60">
+            <settings>
+                <filter>text</filter>
+                <label translate="true">Endpoint</label>
+                <visible>false</visible>
+            </settings>
+        </column>
+
+        <column name="ip_hash" sortOrder="70">
+            <settings>
+                <filter>text</filter>
+                <label translate="true">IP Hash</label>
+                <visible>false</visible>
+            </settings>
+        </column>
+
+        <column name="user_agent" sortOrder="80">
+            <settings>
+                <filter>text</filter>
+                <label translate="true">User Agent</label>
+                <visible>false</visible>
+            </settings>
+        </column>
+
+        <!--
+            Hidden by default: it is long, and on a busy log it is the column
+            most likely to contain hostile text. Enable it per-session from
+            the Columns control when actually debugging.
+        -->
+        <column name="raw_payload" sortOrder="90">
+            <settings>
+                <filter>text</filter>
+                <label translate="true">Raw Payload</label>
+                <visible>false</visible>
+            </settings>
+        </column>
+
+        <column name="queue_message_id" sortOrder="100">
+            <settings>
+                <filter>text</filter>
+                <label translate="true">Queue Message ID</label>
+                <visible>false</visible>
+            </settings>
+        </column>
+    </columns>
+</listing>

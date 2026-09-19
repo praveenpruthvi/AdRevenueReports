@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Webapi:etc/webapi.xsd">
+    <!--
+        Public ingest endpoint (docs/SPECS.md §6, P1-T5). Anonymous on purpose —
+        it's hit from the storefront before any session exists. See
+        docs/SECURITY.md for how this is hardened (validation, rate limiting,
+        never trusting client-supplied identity).
+    -->
+    <route url="/V1/adsanalytics/event" method="POST">
+        <service class="Aavirbhava\AdsAnalytics\Api\EventIngestInterface" method="ingest"/>
+        <resources>
+            <resource ref="anonymous"/>
+        </resources>
+    </route>
+</routes>

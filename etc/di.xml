@@ -1,0 +1,37 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:ObjectManager/etc/config.xsd">
+
+    <!--
+        Extensibility point (docs/SPECS.md §5, P4-T3/P4-T4).
+        A client project adds a new ad-spend provider (e.g. Reddit, Pinterest)
+        by adding an <item> here in ITS OWN di.xml — never edit this array
+        in this module's core to add a platform.
+    -->
+    <type name="Aavirbhava\AdsAnalytics\Model\AdSpendProviderPool">
+        <arguments>
+            <argument name="providers" xsi:type="array">
+                <!-- <item name="google" xsi:type="object">Aavirbhava\AdsAnalytics\Model\AdSpendProvider\GoogleAdsProvider</item> -->
+            </argument>
+        </arguments>
+    </type>
+
+    <!--
+        Grid data source for the Request Log listing (P3-T5b). Registering the
+        collection under the listing's data source name is what lets the
+        UI Component resolve it; without this entry the grid renders with no
+        rows and no error, which looks exactly like "the table is empty".
+    -->
+    <type name="Magento\Framework\View\Element\UiComponent\DataProvider\CollectionFactory">
+        <arguments>
+            <argument name="collections" xsi:type="array">
+                <item name="aavirbhava_adsanalytics_request_log_listing_data_source" xsi:type="string">Aavirbhava\AdsAnalytics\Model\ResourceModel\RequestLog\Grid\Collection</item>
+            </argument>
+        </arguments>
+    </type>
+
+    <preference for="Aavirbhava\AdsAnalytics\Api\EventIngestInterface"
+                type="Aavirbhava\AdsAnalytics\Model\EventIngestService"/>
+    <preference for="Aavirbhava\AdsAnalytics\Api\Data\EventInterface"
+                type="Aavirbhava\AdsAnalytics\Model\Data\Event"/>
+</config>

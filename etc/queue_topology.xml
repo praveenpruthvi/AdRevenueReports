@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework-message-queue:etc/queue_topology.xsd">
+    <exchange name="aavirbhava.adsanalytics" type="topic" connection="amqp">
+        <binding id="AdsAnalyticsEventBinding"
+                 topic="aavirbhava.adsanalytics.event"
+                 destinationType="queue"
+                 destination="aavirbhava.adsanalytics.event"/>
+    </exchange>
+</config>

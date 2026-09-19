@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework-message-queue:etc/queue_consumer.xsd">
+    <!--
+        The handler MUST be declared as a single `handler` attribute in
+        "Class::method" form. consumer.xsd defines exactly one handler
+        attribute and no `class`/`method` pair — this file previously used
+        class="..." method="process", which the XSD does not define. Magento
+        ignored both, leaving the consumer with no handler at all: it dequeued
+        every message, did nothing with it, and acked it. The queue drained to
+        zero, no rows were written, and nothing was logged.
+
+        That failure is invisible to well-formedness checks (the XML parses
+        fine) — it only shows up against the XSD, or by running the consumer
+        and noticing the database stayed empty.
+    -->
+    <consumer name="AavirbhavaAdsAnalyticsEventConsumer"
+              queue="aavirbhava.adsanalytics.event"
+              connection="amqp"
+              handler="Aavirbhava\AdsAnalytics\Model\Queue\EventConsumer::process"/>
+</config>

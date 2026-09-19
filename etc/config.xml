@@ -1,0 +1,110 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Store:etc/config.xsd">
+    <default>
+        <aavirbhava_adsanalytics>
+            <!--
+                Every field in etc/adminhtml/system.xml needs a default here.
+                Without one, core_config_data has no row until an admin saves
+                the section, and every read returns null — which for the
+                retention windows below would mean Cron\PurgeOldData deleting
+                against a null window, and for logging_level would mean
+                undefined behaviour on the very first request.
+            -->
+            <general>
+                <!--
+                    Tracking ships ON: the module does nothing until the
+                    beacon is loaded anyway, and a merchant who installs an
+                    analytics module expects it to collect. The kill switch
+                    exists to stop it, not to start it.
+                -->
+                <enabled>1</enabled>
+                <!--
+                    90 days. Long enough to attribute a considered purchase
+                    back to the ad that started it, short enough to stay
+                    defensible under consent/retention rules. Note this is
+                    the FIRST-PARTY cookie lifetime, not the attribution
+                    window — a returning visitor past this point is counted
+                    as a new visitor.
+                -->
+                <cookie_lifetime_days>90</cookie_lifetime_days>
+                <!--
+                    last_touch matches docs/SPECS.md §4's stated default and
+                    the industry norm: credit the ad that closed the sale.
+                    Switch to first_touch to credit the ad that opened it.
+                -->
+                <attribution_model>last_touch</attribution_model>
+                <!--
+                    100 = sample everything. This is a load-shedding lever
+                    for high-traffic stores (docs/SECURITY.md §4), not a
+                    default-on behaviour — sampling below 100 makes every
+                    absolute count in the reports an estimate.
+                -->
+                <sampling_rate>100</sampling_rate>
+            </general>
+
+
+            <!--
+                docs/SPECS.md §2. These three lists live here rather than in a
+                Setup/Patch/Data patch, which is what the original scaffold
+                proposed. A patch writes core_config_data rows, and a DB row
+                SHADOWS the config.xml default forever — so the moment we ship
+                a new platform (Pinterest, say) in a later module version,
+                every store that ran the patch would silently ignore it and
+                keep the old five. Defaults belong in config.xml precisely so
+                that shipping a new default reaches existing installs. An
+                admin who edits the grid still gets a core_config_data row
+                that overrides these, which is the correct and intended
+                precedence.
+
+                Format is what Magento\Config\Model\Config\Backend\Serialized\ArraySerialized
+                reads: a JSON object keyed by arbitrary row id. Row ids are
+                only used by the admin grid widget; nothing reads them.
+            -->
+            <platforms>
+                <platform_map><![CDATA[{"row_1":{"platform_code":"google","click_id_param":"gclid","default_source":"google","alt_sources":""},"row_2":{"platform_code":"meta","click_id_param":"fbclid","default_source":"facebook","alt_sources":"instagram"},"row_3":{"platform_code":"bing","click_id_param":"msclkid","default_source":"bing","alt_sources":""},"row_4":{"platform_code":"tiktok","click_id_param":"ttclid","default_source":"tiktok","alt_sources":""},"row_5":{"platform_code":"reddit","click_id_param":"rdt_cid","default_source":"reddit","alt_sources":""}}]]></platform_map>
+                <paid_mediums><![CDATA[{"row_1":{"medium":"cpc"},"row_2":{"medium":"ppc"},"row_3":{"medium":"paid"},"row_4":{"medium":"paidsocial"}}]]></paid_mediums>
+                <search_engine_domains><![CDATA[{"row_1":{"domain":"google.com","engine":"google"},"row_2":{"domain":"bing.com","engine":"bing"},"row_3":{"domain":"search.yahoo.com","engine":"yahoo"},"row_4":{"domain":"duckduckgo.com","engine":"duckduckgo"},"row_5":{"domain":"yandex.com","engine":"yandex"},"row_6":{"domain":"yandex.ru","engine":"yandex"},"row_7":{"domain":"baidu.com","engine":"baidu"},"row_8":{"domain":"ecosia.org","engine":"ecosia"}}]]></search_engine_domains>
+            </platforms>
+            <rate_limit>
+                <!--
+                    120/60s is roughly "a page view every half second, sustained",
+                    which no human browsing session reaches but a scripted flood
+                    passes instantly. Tuned per store: raise it for a site with
+                    heavy AJAX navigation, lower it if the request log fills with
+                    junk. docs/SECURITY.md §4.
+                -->
+                <max_requests>120</max_requests>
+                <window_seconds>60</window_seconds>
+            </rate_limit>
+            <logging>
+                <!--
+                    rejected_only, not 'all': the request log stores raw
+                    unvalidated payloads (docs/SPECS.md §9), so logging every
+                    accepted request on a live store is a large volume of
+                    attacker-controllable text for little debugging value.
+                    Rejections are the rows worth having by default. Flip to
+                    'all' temporarily when diagnosing a specific problem.
+                -->
+                <logging_level>rejected_only</logging_level>
+                <!--
+                    14 days, per docs/SECURITY.md §8 — deliberately much
+                    shorter than event_retention_days below, because this
+                    table holds raw unvalidated input rather than derived
+                    analytics.
+                -->
+                <request_log_retention_days>14</request_log_retention_days>
+            </logging>
+
+            <retention>
+                <!--
+                    180 days of raw per-visitor rows, per docs/SECURITY.md
+                    §8. The aggregated ads_analytics_daily_summary is kept
+                    indefinitely and is unaffected by this setting, so
+                    purging raw data here does not lose reporting history.
+                -->
+                <event_retention_days>180</event_retention_days>
+            </retention>
+        </aavirbhava_adsanalytics>
+    </default>
+</config>

@@ -1,0 +1,28 @@
+<?php
+/**
+ * Emits the beacon's config AND its script tag together (P1-T7).
+ *
+ * Both live here rather than the script being declared in layout <head>, so
+ * that the kill switch is honest: BeaconConfig::_toHtml() returns '' when
+ * tracking is disabled, and a disabled module then ships no config global and
+ * no script download at all. With the tag in layout XML the browser still
+ * fetched a JS file on every page view for a module that was switched off.
+ *
+ * Deliberately NOT <script type="text/x-magento-init"> — that is RequireJS,
+ * which CLAUDE.md #4 forbids on the storefront so the module stays
+ * Hyvä-compatible. A plain script tag works identically on both themes.
+ *
+ * `defer` keeps the beacon off the critical rendering path; it must never
+ * delay first paint on a checkout page.
+ *
+ * getBeaconConfigJson() returns JSON from the Json serializer, inserted as a
+ * JS literal rather than HTML — hence @noEscape.
+ *
+ * @var \Aavirbhava\AdsAnalytics\Block\Frontend\BeaconConfig $block
+ * @var \Magento\Framework\Escaper $escaper
+ */
+?>
+<script>
+    window.aavirbhavaAdsAnalytics = <?= /* @noEscape */ $block->getBeaconConfigJson() ?>;
+</script>
+<script defer src="<?= $escaper->escapeUrl($block->getViewFileUrl('Aavirbhava_AdsAnalytics::js/ads-analytics-beacon.js')) ?>"></script>

@@ -1,0 +1,131 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
+    <system>
+        <section id="aavirbhava_adsanalytics" translate="label" sortOrder="200" showInDefault="1" showInWebsite="1" showInStore="0">
+            <label>Ads Analytics</label>
+            <tab>service</tab>
+            <resource>Aavirbhava_AdsAnalytics::config</resource>
+
+            <group id="general" translate="label" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
+                <label>General</label>
+                <field id="enabled" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Enable Tracking</label>
+                    <source_model>Magento\Config\Model\Config\Source\Yesno</source_model>
+                    <comment>Kill switch — disables the frontend beacon and the ingest endpoint's writes entirely.</comment>
+                </field>
+                <field id="cookie_lifetime_days" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Visitor Cookie Lifetime (days)</label>
+                    <validate>validate-digits validate-greater-than-zero</validate>
+                </field>
+                <field id="attribution_model" translate="label" type="select" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Primary Attribution Model</label>
+                    <source_model>Aavirbhava\AdsAnalytics\Model\Config\Source\AttributionModel</source_model>
+                    <comment>docs/SPECS.md §4 — used to pick which touch populates ads_analytics_order_attribution.</comment>
+                </field>
+                <field id="sampling_rate" translate="label" type="text" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Sampling Rate (%)</label>
+                    <validate>validate-digits validate-range range-1-100</validate>
+                    <comment>Optional load-shedding lever for high-traffic stores. Default 100.</comment>
+                </field>
+            </group>
+
+            <group id="platforms" translate="label" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
+                <label>Traffic Classification (Platforms &amp; Search Engines)</label>
+                <comment><![CDATA[
+                    docs/SPECS.md &sect;2. These three lists are the ONLY place a
+                    platform, paid medium or search engine is named. Adding
+                    Pinterest, or a new regional search engine, is a row here
+                    and no code change anywhere (CLAUDE.md #2).
+                    Defaults ship in etc/config.xml, so the store works out of
+                    the box and a later module version can add a platform
+                    without an admin having to notice.
+                ]]></comment>
+                <field id="platform_map" translate="label" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Paid Platform / Click-ID Map</label>
+                    <frontend_model>Aavirbhava\AdsAnalytics\Block\Adminhtml\System\Config\Form\Field\PlatformMap</frontend_model>
+                    <backend_model>Magento\Config\Model\Config\Backend\Serialized\ArraySerialized</backend_model>
+                    <comment><![CDATA[
+                        <b>Click ID Parameter</b> is the signal that classifies a visit as paid, and it
+                        is client-supplied &mdash; the queue consumer rejects any value not listed here
+                        (docs/SECURITY.md &sect;2).<br/>
+                        <b>Default Source</b> is what <code>source</code> becomes for this platform
+                        (meta &rarr; facebook).<br/>
+                        <b>Alt Sources</b> are <code>utm_source</code> values that override Default Source
+                        when present &mdash; meta ships <code>instagram</code>, which is how an Instagram
+                        click is told apart from a Facebook one without naming either in code.
+                        <code>platform_code</code> itself never changes: it stays <code>meta</code> in both cases.
+                    ]]></comment>
+                </field>
+                <field id="paid_mediums" translate="label" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Paid Mediums (no click ID)</label>
+                    <frontend_model>Aavirbhava\AdsAnalytics\Block\Adminhtml\System\Config\Form\Field\PaidMediums</frontend_model>
+                    <backend_model>Magento\Config\Model\Config\Backend\Serialized\ArraySerialized</backend_model>
+                    <comment><![CDATA[
+                        For manually-tagged paid links that carry no click ID, e.g.
+                        <code>?utm_medium=cpc</code>. Matched case-insensitively, so listing
+                        <code>cpc</code> also covers <code>CPC</code>.
+                    ]]></comment>
+                </field>
+                <field id="search_engine_domains" translate="label" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Organic Search-Engine Domains</label>
+                    <frontend_model>Aavirbhava\AdsAnalytics\Block\Adminhtml\System\Config\Form\Field\SearchEngineDomains</frontend_model>
+                    <backend_model>Magento\Config\Model\Config\Backend\Serialized\ArraySerialized</backend_model>
+                    <comment><![CDATA[
+                        Registrable domains only &mdash; <code>google.com</code>, never
+                        <code>.google.com</code> or <code>google.*</code>. Matched at a label boundary,
+                        so <code>notgoogle.com</code> does not match but <code>mail.google.com</code> does.
+                        Wildcards are unsupported by design: list each TLD as its own row mapping to the
+                        same engine name (<code>yandex.com</code> and <code>yandex.ru</code> &rarr; <code>yandex</code>).
+                    ]]></comment>
+                </field>
+            </group>
+
+            <group id="rate_limit" translate="label" sortOrder="25" showInDefault="1" showInWebsite="1" showInStore="0">
+                <label>Ingest Rate Limiting</label>
+                <comment><![CDATA[
+                    docs/SECURITY.md &sect;4. Enforced in <code>Model\EventIngestService</code>, at the
+                    webapi layer &mdash; deliberately NOT in the queue consumer, because by the time a
+                    consumer runs the request has already been accepted and queued, so a limit there
+                    sheds no load at all. Counters are cache-backed (never DB) and keyed on
+                    <code>ip_hash</code> + <code>visitor_uuid</code> together: the uuid alone is
+                    client-generated and rotatable, the ip alone is shared behind NAT.<br/>
+                    Over the limit, events are dropped silently and the caller still gets a 200 &mdash;
+                    a tracking beacon must never surface its state to the storefront.
+                ]]></comment>
+                <field id="max_requests" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Max Requests Per Window</label>
+                    <validate>validate-digits validate-greater-than-zero</validate>
+                    <comment>Best-effort fixed window, not an exact quota — a concurrent burst can overshoot slightly. This is load shedding, not access control.</comment>
+                </field>
+                <field id="window_seconds" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Window (seconds)</label>
+                    <validate>validate-digits validate-greater-than-zero</validate>
+                </field>
+            </group>
+
+            <group id="logging" translate="label" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="0">
+                <label>Request Logging (Debugging)</label>
+                <field id="logging_level" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Logging Level</label>
+                    <source_model>Aavirbhava\AdsAnalytics\Model\Config\Source\LoggingLevel</source_model>
+                    <comment>docs/SPECS.md §9 — Off / Rejected only / All requests.</comment>
+                </field>
+                <field id="request_log_retention_days" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Request Log Retention (days)</label>
+                    <validate>validate-digits validate-greater-than-zero</validate>
+                    <comment>docs/SECURITY.md §8 — kept shorter than analytics-table retention below.</comment>
+                </field>
+            </group>
+
+            <group id="retention" translate="label" sortOrder="40" showInDefault="1" showInWebsite="1" showInStore="0">
+                <label>Data Retention</label>
+                <field id="event_retention_days" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
+                    <label>Raw Visit/Funnel Event Retention (days)</label>
+                    <validate>validate-digits validate-greater-than-zero</validate>
+                    <comment>Aggregated daily summary is retained indefinitely regardless of this setting.</comment>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>

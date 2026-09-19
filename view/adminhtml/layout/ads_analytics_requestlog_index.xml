@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<!--
+    P3-T5b. Layout handle for Controller\Adminhtml\RequestLog\Index.
+    Without this file the controller returned a page with a title and nothing
+    else — which is what the blank admin page was.
+-->
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <update handle="styles"/>
+    <body>
+        <referenceContainer name="content">
+            <uiComponent name="aavirbhava_adsanalytics_request_log_listing"/>
+        </referenceContainer>
+    </body>
+</page>

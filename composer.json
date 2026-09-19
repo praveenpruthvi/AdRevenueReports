@@ -1,0 +1,31 @@
+{
+    "name": "aavirbhava/module-ads-analytics",
+    "description": "Tracks paid-ad visits, checkout funnel progression, and order attribution across ad platforms (Google, Meta, Bing, TikTok, Reddit and extensible to more), with admin reporting.",
+    "type": "magento2-module",
+    "license": "proprietary",
+    "version": "0.1.0",
+    "require": {
+        "php": "~8.1||~8.2||~8.3",
+        "magento/framework": "*",
+        "magento/framework-message-queue": "*",
+        "magento/module-amqp": "*",
+        "magento/module-backend": "*",
+        "magento/module-checkout": "*",
+        "magento/module-config": "*",
+        "magento/module-cron": "*",
+        "magento/module-message-queue": "*",
+        "magento/module-reports": "*",
+        "magento/module-sales": "*",
+        "magento/module-store": "*",
+        "magento/module-ui": "*",
+        "magento/module-webapi": "*"
+    },
+    "autoload": {
+        "files": [
+            "registration.php"
+        ],
+        "psr-4": {
+            "Aavirbhava\\AdsAnalytics\\": ""
+        }
+    }
+}

@@ -1,0 +1,108 @@
+{
+    "ads_analytics_visit": {
+        "column": {
+            "visit_id": true,
+            "visitor_uuid": true,
+            "traffic_type": true,
+            "first_touch_source": true,
+            "first_touch_medium": true,
+            "first_touch_campaign": true,
+            "last_touch_source": true,
+            "last_touch_medium": true,
+            "last_touch_campaign": true,
+            "click_id_param": true,
+            "click_id_value": true,
+            "platform_code": true,
+            "landing_page": true,
+            "customer_id": true,
+            "converted": true,
+            "first_seen_at": true,
+            "last_seen_at": true
+        },
+        "index": {
+            "ADS_ANALYTICS_VISIT_CUSTOMER_ID": true,
+            "ADS_ANALYTICS_VISIT_PLATFORM_CODE": true,
+            "ADS_ANALYTICS_VISIT_TRAFFIC_TYPE": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "ADS_ANALYTICS_VISIT_VISITOR_UUID": true
+        }
+    },
+    "ads_analytics_funnel_event": {
+        "column": {
+            "event_id": true,
+            "visit_id": true,
+            "event_type": true,
+            "entity_id": true,
+            "created_at": true
+        },
+        "index": {
+            "ADS_ANALYTICS_FUNNEL_EVENT_CREATED_AT": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "ADS_ANALYTICS_FUNNEL_EVENT_VISIT_ID_ADS_ANALYTICS_VISIT_VISIT_ID": true
+        }
+    },
+    "ads_analytics_order_attribution": {
+        "column": {
+            "order_id": true,
+            "visit_id": true,
+            "attribution_model": true,
+            "traffic_type": true,
+            "source": true,
+            "medium": true,
+            "campaign": true,
+            "platform_code": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "FK_F635223C17ACCD343BAF316FEB49C9E5": true
+        }
+    },
+    "ads_analytics_daily_summary": {
+        "column": {
+            "summary_id": true,
+            "date": true,
+            "traffic_type": true,
+            "platform_code": true,
+            "source": true,
+            "medium": true,
+            "campaign": true,
+            "visits": true,
+            "add_to_carts": true,
+            "checkout_starts": true,
+            "orders": true,
+            "revenue": true
+        },
+        "index": {
+            "ADS_ANALYTICS_DAILY_SUMMARY_DATE": true
+        },
+        "constraint": {
+            "PRIMARY": true,
+            "UNQ_397A9B375400CA688EBEF1DE2C148D23": true
+        }
+    },
+    "ads_analytics_request_log": {
+        "column": {
+            "log_id": true,
+            "received_at": true,
+            "endpoint": true,
+            "raw_payload": true,
+            "validation_status": true,
+            "rejection_reason": true,
+            "visitor_uuid": true,
+            "ip_hash": true,
+            "user_agent": true,
+            "queue_message_id": true
+        },
+        "index": {
+            "ADS_ANALYTICS_REQUEST_LOG_RECEIVED_AT": true,
+            "ADS_ANALYTICS_REQUEST_LOG_VISITOR_UUID": true
+        },
+        "constraint": {
+            "PRIMARY": true
+        }
+    }
+}

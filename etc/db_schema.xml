@@ -1,0 +1,153 @@
+<?xml version="1.0"?>
+<schema xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Setup/Declaration/Schema/etc/schema.xsd">
+
+    <!-- docs/SPECS.md §3 -->
+    <table name="ads_analytics_visit" resource="default" engine="innodb" comment="Ads Analytics Visit">
+        <column xsi:type="int" name="visit_id" padding="10" unsigned="true" nullable="false" identity="true" comment="Visit ID"/>
+        <column xsi:type="varchar" name="visitor_uuid" nullable="false" length="64" comment="Visitor UUID (first-party cookie)"/>
+        <column xsi:type="varchar" name="traffic_type" nullable="false" length="16" default="unknown" comment="paid|organic|direct|referral (docs/SPECS.md §2); default 'unknown' is a bug indicator, not a real classification — TrafficResolver::resolve() always returns one of the four real values, so any row that's still 'unknown' means the consumer failed to classify it before insert"/>
+        <column xsi:type="varchar" name="first_touch_source" nullable="true" length="64" comment="First Touch Source"/>
+        <column xsi:type="varchar" name="first_touch_medium" nullable="true" length="64" comment="First Touch Medium"/>
+        <column xsi:type="varchar" name="first_touch_campaign" nullable="true" length="128" comment="First Touch Campaign"/>
+        <column xsi:type="varchar" name="last_touch_source" nullable="true" length="64" comment="Last Touch Source"/>
+        <column xsi:type="varchar" name="last_touch_medium" nullable="true" length="64" comment="Last Touch Medium"/>
+        <column xsi:type="varchar" name="last_touch_campaign" nullable="true" length="128" comment="Last Touch Campaign"/>
+        <column xsi:type="varchar" name="click_id_param" nullable="true" length="32" comment="Click ID Param (e.g. gclid)"/>
+        <column xsi:type="varchar" name="click_id_value" nullable="true" length="128" comment="Click ID Value"/>
+        <column xsi:type="varchar" name="platform_code" nullable="true" length="32" comment="Platform Code"/>
+        <column xsi:type="varchar" name="landing_page" nullable="true" length="255" comment="Landing Page"/>
+        <column xsi:type="int" name="customer_id" padding="10" unsigned="true" nullable="true" comment="Customer ID"/>
+        <column xsi:type="boolean" name="converted" nullable="false" default="0" comment="Converted"/>
+        <column xsi:type="timestamp" name="first_seen_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="First Seen At"/>
+        <column xsi:type="timestamp" name="last_seen_at" on_update="true" nullable="false" default="CURRENT_TIMESTAMP" comment="Last Seen At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="visit_id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="AAVIRBHAVA_ADSANALYTICS_VISIT_VISITOR_UUID">
+            <column name="visitor_uuid"/>
+        </constraint>
+        <index referenceId="AAVIRBHAVA_ADSANALYTICS_VISIT_CUSTOMER_ID" indexType="btree">
+            <column name="customer_id"/>
+        </index>
+        <index referenceId="AAVIRBHAVA_ADSANALYTICS_VISIT_PLATFORM_CODE" indexType="btree">
+            <column name="platform_code"/>
+        </index>
+        <index referenceId="AAVIRBHAVA_ADSANALYTICS_VISIT_TRAFFIC_TYPE" indexType="btree">
+            <column name="traffic_type"/>
+        </index>
+    </table>
+
+    <!-- docs/SPECS.md §3 -->
+    <table name="ads_analytics_funnel_event" resource="default" engine="innodb" comment="Ads Analytics Funnel Event">
+        <column xsi:type="int" name="event_id" padding="10" unsigned="true" nullable="false" identity="true" comment="Event ID"/>
+        <column xsi:type="int" name="visit_id" padding="10" unsigned="true" nullable="false" comment="Visit ID"/>
+        <column xsi:type="varchar" name="event_type" nullable="false" length="32" comment="Event Type"/>
+        <column xsi:type="int" name="entity_id" padding="10" unsigned="true" nullable="true" comment="Entity ID (product/order id, contextual)"/>
+        <column xsi:type="timestamp" name="created_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Created At"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="event_id"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="AAVIRBHAVA_ADSANALYTICS_FUNNEL_EVENT_VISIT_ID_ADSANALYTICS_VISIT_VISIT_ID"
+                    table="ads_analytics_funnel_event" column="visit_id"
+                    referenceTable="ads_analytics_visit" referenceColumn="visit_id" onDelete="CASCADE"/>
+        <index referenceId="AAVIRBHAVA_ADSANALYTICS_FUNNEL_EVENT_CREATED_AT" indexType="btree">
+            <column name="created_at"/>
+        </index>
+    </table>
+
+    <!-- docs/SPECS.md §3 -->
+    <table name="ads_analytics_order_attribution" resource="default" engine="innodb" comment="Ads Analytics Order Attribution">
+        <column xsi:type="int" name="order_id" padding="10" unsigned="true" nullable="false" comment="Order ID"/>
+        <column xsi:type="int" name="visit_id" padding="10" unsigned="true" nullable="false" comment="Visit ID"/>
+        <column xsi:type="varchar" name="attribution_model" nullable="false" length="16" comment="Attribution Model (first_touch|last_touch)"/>
+        <column xsi:type="varchar" name="traffic_type" nullable="false" length="16" comment="paid|organic|direct|referral, copied from the linked visit"/>
+        <column xsi:type="varchar" name="source" nullable="true" length="64" comment="Source"/>
+        <column xsi:type="varchar" name="medium" nullable="true" length="64" comment="Medium"/>
+        <column xsi:type="varchar" name="campaign" nullable="true" length="128" comment="Campaign"/>
+        <column xsi:type="varchar" name="platform_code" nullable="true" length="32" comment="Platform Code"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="order_id"/>
+        </constraint>
+        <constraint xsi:type="foreign" referenceId="AAVIRBHAVA_ADSANALYTICS_ORDER_ATTR_VISIT_ID_ADSANALYTICS_VISIT_VISIT_ID"
+                    table="ads_analytics_order_attribution" column="visit_id"
+                    referenceTable="ads_analytics_visit" referenceColumn="visit_id" onDelete="CASCADE"/>
+    </table>
+
+    <!--
+        docs/SPECS.md §3. platform_code/source/medium/campaign are NOT NULL
+        with a 'null_source' sentinel default here, unlike ads_analytics_visit
+        where the same columns ARE nullable.
+
+        WHY NOT NULL: MySQL unique indexes never treat two NULLs as
+        duplicates, so a nullable column inside the unique key below would
+        break upsert-by-unique-key for any slice containing a NULL — which is
+        most organic/direct/referral traffic.
+
+        WHAT HAPPENS IF THE CRON SKIPS COALESCE: not duplicate rows — a hard
+        failure. A column default only applies when the column is OMITTED
+        from the INSERT; passing an explicit NULL to a NOT NULL column raises
+        MySQL error 1048 ("Column 'source' cannot be null") and the cron dies
+        loudly. Cron aggregation (Cron\AggregateDailySummary, P3-T2) must
+        therefore substitute 'null_source' for any NULL from the raw tables
+        before grouping/inserting. Do not reintroduce nullable columns here
+        to "match" the raw schema.
+
+        WHY 'null_source' AND NOT 'none': 'none' is a real, resolver-produced
+        value — TrafficResolver returns medium='none' for direct traffic,
+        meaning "verified: this visit had no medium". The coalesce sentinel
+        must stay distinct from it so a report can tell "we know there was no
+        medium" apart from "the medium was missing from the raw row".
+    -->
+    <table name="ads_analytics_daily_summary" resource="default" engine="innodb" comment="Ads Analytics Daily Summary">
+        <column xsi:type="int" name="summary_id" padding="10" unsigned="true" nullable="false" identity="true" comment="Summary ID"/>
+        <column xsi:type="date" name="date" nullable="false" comment="Date"/>
+        <column xsi:type="varchar" name="traffic_type" nullable="false" length="16" comment="paid|organic|direct|referral (docs/SPECS.md §2)"/>
+        <column xsi:type="varchar" name="platform_code" nullable="false" length="32" default="null_source" comment="Platform Code; 'null_source' when the raw row had none (organic/direct/referral). NOT NULL on purpose — see comment above."/>
+        <column xsi:type="varchar" name="source" nullable="false" length="64" default="null_source" comment="Source; 'null_source' when the raw row had none. NOT NULL on purpose — see comment above."/>
+        <column xsi:type="varchar" name="medium" nullable="false" length="64" default="null_source" comment="Medium; 'null_source' when the raw row had none. Distinct from the resolver's 'none', which means a verified absence of medium on direct traffic. NOT NULL on purpose — see comment above."/>
+        <column xsi:type="varchar" name="campaign" nullable="false" length="128" default="null_source" comment="Campaign; 'null_source' when the raw row had none. NOT NULL on purpose — see comment above."/>
+        <column xsi:type="int" name="visits" padding="10" unsigned="true" nullable="false" default="0" comment="Visits"/>
+        <column xsi:type="int" name="add_to_carts" padding="10" unsigned="true" nullable="false" default="0" comment="Add To Carts"/>
+        <column xsi:type="int" name="checkout_starts" padding="10" unsigned="true" nullable="false" default="0" comment="Checkout Starts"/>
+        <column xsi:type="int" name="orders" padding="10" unsigned="true" nullable="false" default="0" comment="Orders"/>
+        <column xsi:type="decimal" name="revenue" scale="4" precision="20" unsigned="false" nullable="false" default="0" comment="Revenue"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="summary_id"/>
+        </constraint>
+        <constraint xsi:type="unique" referenceId="AAVIRBHAVA_ADSANALYTICS_DAILY_SUMMARY_UNIQUE_SLICE">
+            <column name="date"/>
+            <column name="traffic_type"/>
+            <column name="platform_code"/>
+            <column name="source"/>
+            <column name="medium"/>
+            <column name="campaign"/>
+        </constraint>
+        <index referenceId="AAVIRBHAVA_ADSANALYTICS_DAILY_SUMMARY_DATE" indexType="btree">
+            <column name="date"/>
+        </index>
+    </table>
+
+    <!-- docs/SPECS.md §9 -->
+    <table name="ads_analytics_request_log" resource="default" engine="innodb" comment="Ads Analytics Request Log (debugging)">
+        <column xsi:type="int" name="log_id" padding="10" unsigned="true" nullable="false" identity="true" comment="Log ID"/>
+        <column xsi:type="timestamp" name="received_at" on_update="false" nullable="false" default="CURRENT_TIMESTAMP" comment="Received At"/>
+        <column xsi:type="varchar" name="endpoint" nullable="false" length="128" comment="Endpoint"/>
+        <column xsi:type="text" name="raw_payload" nullable="true" comment="Raw Payload As Received (escape on output, see docs/SECURITY.md)"/>
+        <column xsi:type="varchar" name="validation_status" nullable="false" length="16" default="pending" comment="pending|accepted|rejected — the row is inserted as 'pending' before validation runs, then updated; a row left at 'pending' means the consumer died mid-message"/>
+        <column xsi:type="varchar" name="rejection_reason" nullable="true" length="255" comment="Rejection Reason"/>
+        <column xsi:type="varchar" name="visitor_uuid" nullable="true" length="64" comment="Visitor UUID (when parseable)"/>
+        <column xsi:type="varchar" name="ip_hash" nullable="true" length="64" comment="Hashed IP (never raw, see docs/SECURITY.md)"/>
+        <column xsi:type="varchar" name="user_agent" nullable="true" length="255" comment="User Agent (truncated)"/>
+        <column xsi:type="varchar" name="queue_message_id" nullable="true" length="64" comment="Queue Message ID (set once enqueued)"/>
+        <constraint xsi:type="primary" referenceId="PRIMARY">
+            <column name="log_id"/>
+        </constraint>
+        <index referenceId="AAVIRBHAVA_ADSANALYTICS_REQUEST_LOG_RECEIVED_AT" indexType="btree">
+            <column name="received_at"/>
+        </index>
+        <index referenceId="AAVIRBHAVA_ADSANALYTICS_REQUEST_LOG_VISITOR_UUID" indexType="btree">
+            <column name="visitor_uuid"/>
+        </index>
+    </table>
+</schema>

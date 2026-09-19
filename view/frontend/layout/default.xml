@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<page xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+      xsi:noNamespaceSchemaLocation="urn:magento:framework:View/Layout/etc/page_configuration.xsd">
+    <body>
+        <!--
+            The beacon's config global AND its <script> tag are both emitted
+            by this block, not declared in <head>. That is deliberate: the
+            block renders nothing when tracking is disabled, so the kill
+            switch removes the script download too rather than leaving an
+            inert file to be fetched on every page view.
+
+            Plain <script>, no RequireJS wrapper, so it loads identically on
+            Hyva and LUMA (CLAUDE.md constraint #4).
+        -->
+        <referenceContainer name="before.body.end">
+            <block class="Aavirbhava\AdsAnalytics\Block\Frontend\BeaconConfig"
+                   name="aavirbhava_adsanalytics_beacon"
+                   template="Aavirbhava_AdsAnalytics::beacon-config.phtml"/>
+        </referenceContainer>
+    </body>
+</page>

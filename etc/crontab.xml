@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Cron:etc/crontab.xsd">
+    <group id="default">
+        <!-- P3-T2: rolls raw visit/funnel/attribution data into ads_analytics_daily_summary -->
+        <job name="aavirbhava_adsanalytics_aggregate_daily_summary"
+             instance="Aavirbhava\AdsAnalytics\Cron\AggregateDailySummary"
+             method="execute">
+            <schedule>0 2 * * *</schedule>
+        </job>
+        <!-- P3-T7 / docs/SECURITY.md §8: purges raw event + request log tables per their own retention windows -->
+        <job name="aavirbhava_adsanalytics_purge_old_data"
+             instance="Aavirbhava\AdsAnalytics\Cron\PurgeOldData"
+             method="execute">
+            <schedule>30 2 * * *</schedule>
+        </job>
+    </group>
+</config>

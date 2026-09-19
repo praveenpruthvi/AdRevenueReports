@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="urn:magento:framework:Event/etc/events.xsd">
+    <!-- P2-T2 -->
+    <event name="checkout_cart_product_add_after">
+        <observer name="aavirbhava_adsanalytics_add_to_cart"
+                  instance="Aavirbhava\AdsAnalytics\Observer\AddToCartObserver"/>
+    </event>
+    <!-- P2-T4 -->
+    <event name="sales_order_place_after">
+        <observer name="aavirbhava_adsanalytics_order_place_after"
+                  instance="Aavirbhava\AdsAnalytics\Observer\OrderPlaceAfterObserver"/>
+    </event>
+</config>
