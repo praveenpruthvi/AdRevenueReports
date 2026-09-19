@@ -43,6 +43,8 @@
         <settings>
             <sticky>true</sticky>
         </settings>
+        <!-- P4-T1: native Magento export (CSV + Excel-compatible XML), backed by the same collection the grid renders from — no custom export code needed for grid data. -->
+        <exportButton name="export_button"/>
         <bookmark name="bookmarks"/>
         <columnsControls name="columns_controls"/>
         <filterSearch name="fulltext"/>

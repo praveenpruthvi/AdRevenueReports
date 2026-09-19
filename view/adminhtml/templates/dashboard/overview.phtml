@@ -30,6 +30,18 @@
         <p class="aavirbhava-ads-charts__note">
             <?= $escaper->escapeHtml(__('Charts reflect the rows currently shown by the grid below, including its filters and page size.')) ?>
         </p>
+        <!--
+            P4-T2: a plain link, not a JS-driven form. It cannot read the
+            grid's live filter state without duplicating that state here, so
+            it deliberately reports the WHOLE dataset rather than risk
+            disagreeing with what the grid/charts above show for their
+            filtered view. Pass ?from=&to= (Y-m-d) by hand for a specific
+            range — see Controller\Adminhtml\Report\Pdf.
+        -->
+        <a class="action-secondary aavirbhava-ads-charts__pdf-link"
+           href="<?= $escaper->escapeUrl($block->getPdfReportUrl()) ?>">
+            <?= $escaper->escapeHtml(__('Download PDF Report (full history)')) ?>
+        </a>
     </div>
 </div>
 <script type="text/x-magento-init">

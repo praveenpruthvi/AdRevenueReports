@@ -30,4 +30,17 @@ class Dashboard extends Template
     {
         return 'aavirbhava_adsanalytics_summary_listing.aavirbhava_adsanalytics_summary_listing_data_source';
     }
+
+    /**
+     * URL for the P4-T2 PDF report. No date params: the controller defaults
+     * an absent range to the whole dataset, which is what a plain link
+     * without JS to read the grid's current filter state can offer without
+     * risking disagreeing with what the grid shows (see this class's
+     * docblock on why the charts avoid a second, possibly-inconsistent
+     * fetch).
+     */
+    public function getPdfReportUrl(): string
+    {
+        return $this->getUrl('ads_analytics/report/pdf');
+    }
 }

@@ -50,6 +50,8 @@
         <settings>
             <sticky>true</sticky>
         </settings>
+        <!-- P4-T1: native Magento export, same mechanism as the summary grid. -->
+        <exportButton name="export_button"/>
         <bookmark name="bookmarks"/>
         <columnsControls name="columns_controls"/>
         <filterSearch name="fulltext"/>

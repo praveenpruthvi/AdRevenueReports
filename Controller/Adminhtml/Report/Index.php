@@ -10,9 +10,13 @@ use Magento\Framework\App\Action\HttpGetActionInterface;
 use Magento\Framework\Controller\ResultInterface;
 
 /**
- * P3-T3: dashboard page — tabs for Dashboard (funnel/breakdown charts,
- * P3-T4) and Grid (filterable listing, P3-T5), matching the tab pattern
- * used in Aavirbhava_SalesAnalytics for UI/UX consistency.
+ * P3-T3: the report page. Renders charts (P3-T4) above a filterable grid
+ * (P3-T5) on ONE page rather than the originally planned Dashboard/Grid
+ * tabs, because the charts bind to the grid's own UI-Component data
+ * provider so that filtering the grid redraws them — see
+ * view/adminhtml/layout/ads_analytics_report_index.xml and PROGRESS.md's
+ * "P3-T3/T4/T5 complete" entry for why. P4-T2 adds a PDF export of the
+ * aggregated data, linked from the same page (Controller\Adminhtml\Report\Pdf).
  */
 class Index extends Action implements HttpGetActionInterface
 {
@@ -28,10 +32,6 @@ class Index extends Action implements HttpGetActionInterface
         $resultPage = $this->resultFactory->create(ResultFactory::TYPE_PAGE);
         $resultPage->setActiveMenu('Aavirbhava_AdsAnalytics::report_dashboard');
         $resultPage->getConfig()->getTitle()->prepend(__('Ads Analytics'));
-
-        // TODO(P3-T3): layout handle ads_analytics_report_index.xml renders
-        // the tab container; Block\Adminhtml\Dashboard supplies the data for
-        // the charts (P3-T4) once the daily-summary table is populated.
 
         return $resultPage;
     }

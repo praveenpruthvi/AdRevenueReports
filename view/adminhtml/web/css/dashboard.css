@@ -6,3 +6,4 @@
 .aavirbhava-ads-charts__title { font-weight: 600; margin: 0 0 8px; color: #303030; }
 .aavirbhava-ads-charts__empty { flex-basis: 100%; color: #6d7278; text-align: center; margin: 40px 0; }
 .aavirbhava-ads-charts__note { flex-basis: 100%; color: #6d7278; font-size: 1.2rem; margin: 0; }
+.aavirbhava-ads-charts__pdf-link { flex-basis: 100%; display: inline-block; width: max-content; margin-top: .8rem; }

@@ -50,13 +50,40 @@ Status values: `Not Started` | `In Progress` | `Done` | `Blocked`. Update status
 ## Phase 4 — Export + ad-spend/ROAS
 | ID | Task | Depends on | Status |
 |---|---|---|---|
-| P4-T1 | Excel export (grid + dashboard data) | P3-T5 | Not Started |
-| P4-T2 | PDF export | P3-T5 | Not Started |
+| P4-T1 | Excel export (grid + dashboard data). **Done**. Both listings (`aavirbhava_adsanalytics_summary_listing`, `..._request_log_listing`) now declare `<exportButton>`, which is Magento's stock `Magento_Ui` mechanism (`GridToCsv`/`GridToXml` — the XML is real SpreadsheetML that opens natively in Excel), backed by the SAME data-provider collection the grid itself reads from, including all SQL-derived columns (`product_views`, `view_rate`, `cart_rate`, `conversion_rate`, `revenue_per_visit`). No custom export code needed. Verified: exported XML is well-formed, all 16 columns present with correct labels, 38 data rows + header | P3-T5 | Done |
+| P4-T2 | PDF export. **Done**. `Model\Pdf\DashboardReportBuilder` (reads only `ads_analytics_daily_summary`, per CLAUDE.md #6) + `Model\Pdf\DashboardPdfGenerator` (`\Zend_Pdf`, the same library `Magento_Sales` uses for invoice PDFs — no new composer dependency) + `Controller\Adminhtml\Report\Pdf` (optional `?from=&to=`, Y-m-d, validated with a round-trip check before reaching SQL; absent `from` defaults to the earliest date with any data). Linked from a "Download PDF Report" button on the report page. Produces a one-page summary: funnel totals + rates, traffic-type breakdown, top 10 paid campaigns by revenue. Verified: real PDF (`%PDF` signature, 1 page) with correct numbers confirmed via `pdftotext` and via direct content-stream regex (Zend_Pdf does not compress by default); empty-range case renders a "No data for this period" notice rather than throwing on division by zero; invalid/out-of-order date params redirect with a message rather than reaching SQL; resolved cleanly through the real DI container. Found and fixed a real bug during verification: `Select::where('date BETWEEN ? AND ?', [\$from, \$to])` silently mis-binds — Magento's `Select::where()` treats an array value as an IN-list expansion for ONE placeholder, not one value per `?`, producing a malformed query; fixed to two chained `->where()` calls. 22 new unit tests, 179 total green, 0 phpcs errors, 0 phpstan errors | P3-T5 | Done |
 | P4-T3 | `Api/AdSpendProviderInterface` + `AdSpendProviderPool` (di.xml virtual-type array). **Done**. Interface + pool existed from the Phase 1 scaffold with test coverage already in place; confirmed both are sound as the extension contract for P4-T4 | P3-T1 | Done |
 | P4-T4 | Reference/example provider implementation (e.g. CSV-import based). **Done**. `Model\AdSpendProvider\CsvAdSpendProvider` reads `var/aavirbhava/adsanalytics/adspend/<platform_code>.csv` (date,campaign,spend). Registered in this module's OWN `etc/di.xml` for both `google` and `meta` against the SAME class instance — platform_code arrives as a `getSpend()` argument, not a constructor one, so one generic credential-free class serves every platform, proving CLAUDE.md #2 ("no platform-specific code") for spend data too. Missing file -> `[]`, not an error (a platform can legitimately have no spend yet); a malformed row is skipped and logged, not thrown, so one bad line in a merchant-edited CSV cannot blank out the rest of the file. Verified: pool resolves google/meta, correctly refuses an unregistered platform; date-range filtering is inclusive on both bounds; a deliberately malformed row (bad spend, invalid date, empty campaign, too few columns) is skipped with a logged warning while surrounding rows survive; a path-traversal platform code resolves to "no file" rather than escaping `var/`. 12 new unit tests, 156 total green, 0 phpcs errors | P4-T3 | Done |
 | P4-T5 | ROAS calculation in dashboard (spend vs. revenue, where spend data available) | P4-T3, P3-T4 | Not Started |
 | P4-T6 | Store any provider API credentials via encrypted config backend (docs/SECURITY.md §10) | P4-T4 | Not Started |
 | P4-T7 | Final regression: re-run `tools/simulate_traffic.py`, full sign-off checklist (docs/TESTING.md §6) | P4-T1, P4-T2, P4-T5, P4-T6 | Not Started |
 
+
+## Phase 5 — Access-log simulator page (requested 2026-09-19, deferred to after all other phases)
+User's own words, captured verbatim so the intent isn't paraphrased away before this is picked up:
+1. An admin page where the user can input the path of an access log file.
+2. The file can be compressed (tar, zip, etc.) or uncompressed (.log).
+3. From that file, generate a report: how many visitors came, how many were blocked, how many made a purchase, and the conversion — shown on the page.
+4. The user can download that data for external use.
+
+This is a DIFFERENT capture path from everything else in this module. Phases 1–4 all observe traffic live, through the storefront beacon and the module's own REST endpoint. This instead parses a raw web-server access log after the fact — Apache/Nginx combined-log-format lines the module has never seen and has no beacon-side visitor_uuid or click-id data for. It is explicitly scoped as a SIMULATOR / offline analysis tool, not a replacement for the live pipeline, and depends on none of Phases 1-4's tables.
+
+**Open design questions to resolve before starting** (deliberately left unresolved — the user said not to work on this yet, so no assumption below has been picked):
+- **What counts as "blocked"?** A raw access log has no concept of this module's rate limiter or validator. Candidates: HTTP status code (403/429/503), a match against a configurable bot/UA blocklist, or something else the user has in mind. Needs the user's definition, not an assumption.
+- **What counts as "a purchase" / "conversion"?** An access log is just HTTP requests — there is no order-success signal unless it's inferred from a hit on a known success-page URL pattern (e.g. `/checkout/onepage/success/`), which then needs a config field for that pattern (LUMA vs. a custom checkout may differ) and can only be a proxy for a real purchase, not a source of truth the way `sales_order` is.
+- **"Visitors"**: likely unique IPs or unique IP+User-Agent within some session window, since there is no cookie/UUID in a raw log — needs a definition and a session-window decision.
+- **File input mechanism**: the ask says "input the path" — likely a server-side path a text field submits, not a browser upload widget. Needs confirming, since a path field implies the file already exists on the app server's filesystem (or is reachable by it), which has its own security surface (path traversal, arbitrary file read) worth designing deliberately rather than bolting on.
+- **Archive support**: "compressed (tar, zip, etc.)" — needs a concrete supported-format list (.tar, .tar.gz, .zip, and plain .log are the obvious four; decide whether others are in scope) and a decompression approach that does not load an entire large archive into memory at once.
+- **Download format** for the generated report: presumably CSV, matching the Excel/PDF pattern P4-T1/T2 already established for the rest of the module, but not yet confirmed.
+
+| ID | Task | Depends on | Status |
+|---|---|---|---|
+| P5-T1 | Resolve the open design questions above with the user | none | Not Started |
+| P5-T2 | Admin page: path input field, archive-format detection, streaming decompression (tar/zip/gz) without loading the whole file into memory | P5-T1 | Not Started |
+| P5-T3 | Access-log line parser (Apache/Nginx combined log format) — visitor/blocked/purchase counting per P5-T1's resolved definitions | P5-T1 | Not Started |
+| P5-T4 | On-page report display: visitors, blocked, purchases, conversion rate | P5-T2, P5-T3 | Not Started |
+| P5-T5 | Download the generated report (format per P5-T1) | P5-T4 | Not Started |
+
+
 ## Recommended order
-P1 (all) → resolve checkout-type decision → P2 (all) → P3 (all) → P4 (T1/T2 and T3–T5 can run in parallel, they're independent, then T6 → T7).
+P1 (all) → resolve checkout-type decision → P2 (all) → P3 (all) → P4 (T1/T2 and T3–T5 can run in parallel, they're independent, then T6 → T7) → Phase 5, explicitly requested to start only after everything above is done.
