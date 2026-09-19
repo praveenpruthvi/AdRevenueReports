@@ -4,7 +4,7 @@ Update this file in place after every work session. It's a current-state snapsho
 
 **Last updated:** 2026-09-19
 **Current phase:** Phase 3 complete; Phase 4 (export + ad-spend/ROAS) not yet started
-**Current task:** Phases 1, 2 and 3 are complete. Phase 4: **P4-T1 through P4-T5 done** — Excel/CSV export, a PDF report, a working ad-spend provider, and ROAS per platform on the report page and in the PDF. Next: **P4-T6** (encrypted credential storage, largely a documented pattern since no shipped provider needs credentials) and **P4-T7** (final regression). Phase 5 (access-log simulator page) remains deferred by request, with several of its design questions still open.
+**Current task:** Phases 1, 2 and 3 are complete. Phase 4: **P4-T1 through P4-T6 done** — Excel/CSV export, a PDF report, a working ad-spend provider, ROAS per platform, and the credential-storage pattern with an enforcing test. Only **P4-T7** (final regression: re-run the simulator, full sign-off checklist) remains. Phase 5 (access-log simulator page) is deferred by request, with several of its design questions still open. Several Phase 4 features (PDF/CSV/Excel downloads, the ROAS table) have not yet been seen in a browser; the user has said they will verify them together.
 
 ## Phase status
 | Phase | Status |
@@ -12,7 +12,7 @@ Update this file in place after every work session. It's a current-state snapsho
 | 1 — Scaffold + capture layer | **Complete (15/15)** — verified end to end in a real browser, reconciled exactly against a 300-visitor simulation, 104 unit + 26 integration tests green |
 | 2 — Funnel events + order attribution | **Complete (7/7)** — LUMA checkout adapter shipped, Hyvä left as a documented drop-in; full funnel `add_to_cart → checkout_start → checkout_step_shipping → checkout_step_payment → order_placed` confirmed live |
 | 3 — Aggregation + admin reporting | **Complete (8/8)** — nightly rollup + admin charts/grid, retention purge, summary reconciled exactly against both raw data and a seeded simulator run |
-| 4 — Export + ad-spend/ROAS | In Progress (5/7) — T1–T5 done |
+| 4 — Export + ad-spend/ROAS | In Progress (6/7) — T1–T6 done, T7 remaining |
 | 5 — Access-log simulator page (new, requested 2026-09-19) | Deferred — requirements captured in TASKS.md, explicitly to start only after Phase 4 |
 
 ## Open decisions / blockers
@@ -72,6 +72,28 @@ Two details in the filter worth not "simplifying" later:
 - Validity is checked by asking MySQL (`SELECT ? REGEXP ?`), not `preg_match`. They are different engines, so a pattern PCRE accepts can still be rejected by the database, and the database is the only opinion that matters. An invalid pattern falls back to a literal match rather than erroring, because a half-typed expression is the normal state of a filter box; MySQL would otherwise raise 1139 and the grid would render as a failed request.
 
 **Verified** against seven beacon-realistic landings. Classification came out `paid` / `paid` / `paid` / `referral` / `referral` / `organic` / `direct`, and the log immediately surfaced genuine gaps: `twclid` and `mc_cid` URLs landing as `referral`, and `li_fat_id` / `epik` classified paid only via their medium with no platform recognised. Filters behaved exactly as intended — `gclid` → 1, `[?&][a-z_]*clid=` → 2, `[?&]utm_medium=(cpc|paid)` → 3, `twclid|epik|li_fat_id|mc_cid` → 4, invalid `utm_(` → 0 rows and no error, `%20` → correctly matched a percent-encoded URL. Other columns unaffected. Reflection on `Api\Data\EventInterface` passes on all 30 methods, so the new accessor cannot 500 the webapi. 137 unit tests green.
+
+### P4-T6 complete — credential storage, as a pattern with enforcement (2026-09-19)
+SECURITY.md §10 requires provider API credentials to go through Magento's encrypted backend. This module has nothing to encrypt: `CsvAdSpendProvider` reads a file, and a live Google Ads / Meta provider is a client-project addition (no OAuth access here, as with Hyvä). So the task shipped **no credential field** — one in this module's own `system.xml` would be dead configuration nothing reads — and instead shipped the parts a provider developer needs, plus a way to keep them honest.
+
+**`Model\Config\AdSpendCredentials`** reads and decrypts a credential. Magento's `Encrypted` backend model encrypts on save, but `ScopeConfigInterface::getValue()` hands the ciphertext straight back; nothing decrypts on read, so the obvious mistake is using the stored string as though it were the secret.
+
+**It fails closed, and the reason is a trap in core.** `Encryptor::decrypt()` does not fail on a value that was never encrypted: a string with no colons is treated as the oldest legacy format and "decrypted" into junk, frequently non-empty. A secret stored in plain text — through a plain field, `config:set`, or a direct SQL insert — would therefore appear to work, or fail mysteriously, instead of being flagged. So the reader checks the value's shape (`^\d+:\d+:`, which is what `encrypt()` writes) BEFORE decrypting and refuses anything else with a log line naming the config path, never the value or the ciphertext. Unset returns `null` silently (an unconfigured provider is normal). A key that has been rotated or lost is the realistic way a correctly stored secret stops working; it returns `null` with an actionable message.
+
+**A test found a real gap in the first draft.** The reader did not catch exceptions from `decrypt()`; the wrong-key case happens to return `''` from the real `Encryptor`, so the obvious test passed, but a decrypt that throws (a sodium error, malformed data) would have propagated into the middle of a spend report. Only a test with an encryptor that throws exposed it. Now contained.
+
+**`Test\Unit\Config\SecretFieldPolicyTest` enforces the rule.** It fails the build if a field whose id or label looks like a secret is not `type="obscure"` with the `Encrypted` backend model, or has a `config.xml` default. Two properties worth keeping: it also flags an `obscure` field WITHOUT the backend model — masked in the browser but stored in clear, the half-measure that looks safe and is not — and it recognises a secret by its label when the id is innocuous. And because it passes today by finding nothing, which proves nothing, it also runs the checker against fixtures (one good field accepted, four bad ones caught, ordinary settings left alone) and asserts the real `system.xml` was actually parsed and non-empty, so a wrong path or changed structure cannot make it pass vacuously. It covers THIS module only; a provider module needs its own copy.
+
+**Verified against a real database, not just mocks.** A throwaway `obscure` + `Encrypted` field was added to `system.xml`, saved through `Magento\Config\Model\Config` (the path the admin form uses), and inspected:
+- `core_config_data` held `0:3:<ciphertext>` — no plaintext — and the reader returned the original secret.
+- Re-saving the page with the masked `******` placeholder (what the browser posts when the field is untouched) left the stored value unchanged and the secret still readable.
+- A plain-text value written directly into the table was refused (`null`), with a log line naming the path and containing neither secret (0 matches in `system.log`).
+
+The probe field, its DB row and the log lines' subject were then removed, and `system.xml` was checked against a backup: identical hash, zero occurrences of "probe" left in it or in `core_config_data`.
+
+Real `Encryptor` instances (not mocks) are used for the round-trip tests, including one asserting that what Magento actually writes matches the shape the reader accepts — so a future Magento changing its ciphertext format would fail a test rather than silently reject every legitimate secret. 17 new unit tests, 211 total green.
+
+The recipe for a provider module — the `system.xml` snippet, the read call, and the `config:sensitive:set` alternative that keeps a secret out of the database entirely — is in docs/SECURITY.md §10.
 
 ### P4-T5 complete — ROAS per platform (2026-09-19)
 Return on ad spend (revenue / spend) is now shown as a per-platform table on the report page and as a "Return on Ad Spend by Platform" section in the PDF, both fed by `Model\Roas\RoasReportBuilder` so they cannot disagree.

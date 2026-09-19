@@ -49,3 +49,33 @@ Dedicated ACL resource for this module's admin menu/pages/config, independent of
 
 ## 10. Secrets
 Any ad-spend provider API credentials (Phase 4 — Google Ads/Meta Ads APIs) must be stored via Magento's encrypted config backend (`Magento\Config\Model\Config\Backend\Encrypted`), never plain text in `system.xml` defaults or DB.
+
+**Implemented at P4-T6.** This module ships **no** credential field, because the only provider it includes, `CsvAdSpendProvider`, reads a file and needs none. A provider that calls a real platform API is added by a client project, which declares its own fields and reads them back through `Model\Config\AdSpendCredentials`. Adding a field to this module's own `system.xml` just to have one would be dead configuration with nothing reading it.
+
+**Adding a credential to a provider module.** In the provider module's own `etc/adminhtml/system.xml`, extend this module's section (Magento merges sections by id):
+
+```xml
+<config>
+    <system>
+        <section id="aavirbhava_adsanalytics">
+            <group id="google_ads" translate="label" sortOrder="200" showInDefault="1">
+                <label>Google Ads</label>
+                <field id="client_secret" translate="label" type="obscure" sortOrder="10" showInDefault="1">
+                    <label>Client Secret</label>
+                    <backend_model>Magento\Config\Model\Config\Backend\Encrypted</backend_model>
+                </field>
+            </group>
+        </section>
+    </system>
+</config>
+```
+
+Both halves are required, and neither is enough alone: `type="obscure"` masks the value in the admin form, while the `Encrypted` backend model is what actually encrypts it before it reaches `core_config_data`. A field that is masked but not encrypted looks safe in the browser and is stored in clear. Never put a value for such a field in `config.xml`.
+
+Read it with `AdSpendCredentials::get('aavirbhava_adsanalytics/google_ads/client_secret')`. Do not call `ScopeConfigInterface::getValue()` and use the result: it returns the ciphertext, because nothing decrypts on read.
+
+**The reader fails closed.** It returns `null` (and logs the config path — never the value) when the credential is unset, was stored unencrypted, or cannot be decrypted. The "stored unencrypted" check exists because `Encryptor::decrypt()` does *not* fail on plain text: a value with no colons is treated as the legacy Blowfish format and "decrypted" into junk, often non-empty. A secret placed in the database directly, or through `config:set`, would otherwise appear to work or fail mysteriously; refusing it forces the mistake to be fixed. A rotated or lost crypt key makes a correctly stored secret undecryptable, and surfaces the same way, with a log line telling the operator to re-enter it.
+
+**Enforced by a test.** `Test/Unit/Config/SecretFieldPolicyTest` scans this module's `system.xml` and `config.xml` and fails the build if any field whose id or label looks like a secret (`secret`, `token`, `password`, `api key`, `private key`, `credential`, `access key`) is not `type="obscure"` with the `Encrypted` backend model, or has a default value. It is a policy check on THIS module only; a provider module needs the same test of its own.
+
+**Alternative: keep the secret out of the database entirely.** `bin/magento config:sensitive:set <path> <value>` stores it in `env.php` rather than `core_config_data`. That path must be declared as sensitive in a `di.xml` argument to `Magento\Config\Model\Config\TypePool`, and a value set that way is read back with the ordinary config API rather than `AdSpendCredentials`, since it is not encrypted with the crypt key. Suitable for deployments that inject secrets from an environment or vault.
