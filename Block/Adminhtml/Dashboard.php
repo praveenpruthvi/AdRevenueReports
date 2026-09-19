@@ -3,7 +3,9 @@ declare(strict_types=1);
 
 namespace Aavirbhava\AdsAnalytics\Block\Adminhtml;
 
+use Aavirbhava\AdsAnalytics\Model\Roas\RoasReportBuilder;
 use Magento\Backend\Block\Template;
+use Magento\Backend\Block\Template\Context;
 
 /**
  * Dashboard charts above the Ads Analytics report grid (P3-T4).
@@ -21,6 +23,17 @@ use Magento\Backend\Block\Template;
  */
 class Dashboard extends Template
 {
+    private RoasReportBuilder $roasReportBuilder;
+
+    /** @var array|null memoised: the template reads it more than once */
+    private ?array $roasReport = null;
+
+    public function __construct(Context $context, RoasReportBuilder $roasReportBuilder, array $data = [])
+    {
+        parent::__construct($context, $data);
+        $this->roasReportBuilder = $roasReportBuilder;
+    }
+
     /**
      * Name of the Ui Component provider the charts bind to. Must match the
      * dataSource name in
@@ -42,5 +55,24 @@ class Dashboard extends Template
     public function getPdfReportUrl(): string
     {
         return $this->getUrl('ads_analytics/report/pdf');
+    }
+
+    /**
+     * P4-T5. Return on ad spend, one row per platform, over the whole dataset.
+     *
+     * Deliberately NOT tied to the grid's filters, unlike the charts. ROAS
+     * needs spend, which comes from a provider rather than from the summary
+     * table, so it cannot be read off the grid's data provider. See
+     * Model\Roas\RoasReportBuilder.
+     *
+     * @return array the shape RoasReportBuilder::build() returns
+     */
+    public function getRoasReport(): array
+    {
+        if ($this->roasReport === null) {
+            $this->roasReport = $this->roasReportBuilder->build();
+        }
+
+        return $this->roasReport;
     }
 }

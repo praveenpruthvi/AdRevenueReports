@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Aavirbhava\AdsAnalytics\Test\Unit\Model\Pdf;
 
 use Aavirbhava\AdsAnalytics\Model\Pdf\DashboardReportBuilder;
+use Aavirbhava\AdsAnalytics\Model\Roas\RoasReportBuilder;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\DB\Adapter\AdapterInterface;
 use Magento\Framework\DB\Select;
@@ -44,7 +45,7 @@ class DashboardReportBuilderTest extends TestCase
 
     private function builder(): DashboardReportBuilder
     {
-        return new DashboardReportBuilder($this->resource);
+        return new DashboardReportBuilder($this->resource, $this->createMock(RoasReportBuilder::class));
     }
 
     public function testAnEmptyDateRangeNormalisesNullSumsToZero(): void

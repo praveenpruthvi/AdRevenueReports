@@ -43,6 +43,7 @@ class DashboardPdfGenerator
         $y = $this->drawHeader($page, $report, $y);
         $y = $this->drawFunnelSection($page, $report['funnel'], $y);
         $y = $this->drawTrafficTypeTable($page, $report['by_traffic_type'], $y);
+        $y = $this->drawRoasTable($page, $report['roas'] ?? null, $y);
         $this->drawTopCampaignsTable($page, $report['top_campaigns'], $y);
 
         return $pdf;
@@ -124,6 +125,52 @@ class DashboardPdfGenerator
                 $this->formatCurrency($row['revenue']),
             ], $y);
         }
+
+        return $y - self::SECTION_GAP;
+    }
+
+    /**
+     * P4-T5. One row per platform: spend, revenue, ROAS.
+     *
+     * "-" for a figure that is not known rather than 0.00: a zero spend would
+     * say the platform was free, and a zero ROAS would say its ads earned
+     * nothing, when the truth is that no cost has been recorded (see
+     * Model\Roas\RoasReportBuilder for the three states).
+     *
+     * @param array|null $roas the shape RoasReportBuilder::build() returns
+     */
+    private function drawRoasTable(\Zend_Pdf_Page $page, ?array $roas, float $y): float
+    {
+        $y = $this->drawSectionTitle($page, 'Return on Ad Spend by Platform', $y);
+
+        if (empty($roas['rows'])) {
+            return $this->drawEmptyNotice($page, $y);
+        }
+
+        $columns = [
+            ['label' => 'Platform', 'width' => 150, 'align' => 'left'],
+            ['label' => 'Spend', 'width' => 100, 'align' => 'right'],
+            ['label' => 'Revenue', 'width' => 100, 'align' => 'right'],
+            ['label' => 'ROAS', 'width' => 80, 'align' => 'right'],
+        ];
+        $y = $this->drawTableHeader($page, $columns, $y);
+
+        foreach ($roas['rows'] as $row) {
+            $y = $this->drawTableRow($page, $columns, [
+                $row['label'],
+                $row['spend'] !== null ? $this->formatCurrency($row['spend']) : '-',
+                $this->formatCurrency($row['revenue']),
+                $row['roas'] !== null ? sprintf('%.2fx', $row['roas']) : '-',
+            ], $y);
+        }
+
+        $totals = $roas['totals'];
+        $y = $this->drawTableRow($page, $columns, [
+            'Blended (with spend data)',
+            $this->formatCurrency($totals['spend']),
+            $this->formatCurrency($totals['revenue']),
+            $totals['roas'] !== null ? sprintf('%.2fx', $totals['roas']) : '-',
+        ], $y);
 
         return $y - self::SECTION_GAP;
     }

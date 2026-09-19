@@ -44,6 +44,86 @@
         </a>
     </div>
 </div>
+<?php
+/**
+ * P4-T5. Rendered server-side from Model\Roas\RoasReportBuilder, not bound to
+ * the grid's data provider like the charts above: spend comes from a provider,
+ * not from the summary table.
+ */
+$roas = $block->getRoasReport();
+$formatMoney = static fn (float $amount): string => number_format($amount, 2);
+?>
+<div class="admin__fieldset-wrapper aavirbhava-ads-roas">
+    <div class="admin__fieldset-wrapper-title">
+        <strong><?= $escaper->escapeHtml(__('Return on Ad Spend (paid traffic)')) ?></strong>
+    </div>
+    <div class="admin__fieldset-wrapper-content">
+        <?php if (empty($roas['rows'])): ?>
+            <p class="aavirbhava-ads-charts__note">
+                <?= $escaper->escapeHtml(__('No paid traffic or ad-spend data yet.')) ?>
+            </p>
+        <?php else: ?>
+            <div class="admin__table-wrapper">
+                <table class="data-grid aavirbhava-ads-roas__table">
+                    <thead>
+                        <tr>
+                            <th class="data-grid-th"><?= $escaper->escapeHtml(__('Platform')) ?></th>
+                            <th class="data-grid-th _right"><?= $escaper->escapeHtml(__('Spend')) ?></th>
+                            <th class="data-grid-th _right"><?= $escaper->escapeHtml(__('Revenue')) ?></th>
+                            <th class="data-grid-th _right"><?= $escaper->escapeHtml(__('ROAS')) ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($roas['rows'] as $row): ?>
+                            <tr>
+                                <td><?= $escaper->escapeHtml($row['label']) ?></td>
+                                <td class="_right">
+                                    <?= $row['spend'] === null
+                                        ? $escaper->escapeHtml(__('no data'))
+                                        : $escaper->escapeHtml($formatMoney($row['spend'])) ?>
+                                </td>
+                                <td class="_right"><?= $escaper->escapeHtml($formatMoney($row['revenue'])) ?></td>
+                                <td class="_right">
+                                    <?php if ($row['status'] === 'ok'): ?>
+                                        <?= $escaper->escapeHtml($formatMoney($row['roas']) . 'x') ?>
+                                    <?php elseif ($row['status'] === 'zero_spend'): ?>
+                                        <?= $escaper->escapeHtml(__('n/a (no spend)')) ?>
+                                    <?php else: ?>
+                                        <?= $escaper->escapeHtml(__('no data')) ?>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td><strong><?= $escaper->escapeHtml(__('Blended (platforms with spend data)')) ?></strong></td>
+                            <td class="_right"><strong><?= $escaper->escapeHtml($formatMoney($roas['totals']['spend'])) ?></strong></td>
+                            <td class="_right"><strong><?= $escaper->escapeHtml($formatMoney($roas['totals']['revenue'])) ?></strong></td>
+                            <td class="_right">
+                                <strong>
+                                    <?= $roas['totals']['roas'] === null
+                                        ? $escaper->escapeHtml(__('n/a'))
+                                        : $escaper->escapeHtml($formatMoney($roas['totals']['roas']) . 'x') ?>
+                                </strong>
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+            <p class="aavirbhava-ads-charts__note">
+                <?= $escaper->escapeHtml(
+                    __(
+                        'Period: %1 to %2. ROAS is revenue divided by spend, per platform. "no data" means no spend has been recorded for that platform, which is not the same as zero. Platforms without spend data (%3) are excluded from the blended total, since counting their revenue against only part of the cost would overstate it. Revenue and spend are only comparable on a single-currency store.',
+                        $roas['from'],
+                        $roas['to'],
+                        $roas['totals']['rows_without_spend']
+                    )
+                ) ?>
+            </p>
+        <?php endif; ?>
+    </div>
+</div>
 <script type="text/x-magento-init">
 {
     "#aavirbhava-ads-funnel-canvas": {

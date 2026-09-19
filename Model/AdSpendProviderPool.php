@@ -40,4 +40,20 @@ class AdSpendProviderPool
     {
         return isset($this->providers[$platformCode]);
     }
+
+    /**
+     * Every platform_code that has a registered provider.
+     *
+     * Added for P4-T5's ROAS report. Iterating only the platforms that appear
+     * in the summary would hide a campaign that SPENT money but drew no
+     * traffic — which is exactly the case a merchant most needs to see — so
+     * the report has to be able to ask "which platforms can report spend?"
+     * independently of "which platforms sent visitors?".
+     *
+     * @return string[]
+     */
+    public function getPlatformCodes(): array
+    {
+        return array_map('strval', array_keys($this->providers));
+    }
 }

@@ -4,7 +4,7 @@ Update this file in place after every work session. It's a current-state snapsho
 
 **Last updated:** 2026-09-19
 **Current phase:** Phase 3 complete; Phase 4 (export + ad-spend/ROAS) not yet started
-**Current task:** Phases 1, 2 and 3 are complete. Phase 4: **P4-T1 through P4-T4 done** — Excel/CSV export via Magento's stock grid mechanism, a real PDF report via `\Zend_Pdf`, and a working ad-spend provider registered for `google`/`meta`. Next: **P4-T5** (ROAS, spend now exists to calculate it against), then P4-T6 (encrypted credential storage) and P4-T7 (final regression). A new Phase 5 (access-log simulator page) has been requested and its requirements captured in TASKS.md, but is explicitly deferred until every other phase is complete — several of its design decisions (what counts as "blocked"/"a purchase", the file-input mechanism, archive format support) are still open and need the user's input before work starts.
+**Current task:** Phases 1, 2 and 3 are complete. Phase 4: **P4-T1 through P4-T5 done** — Excel/CSV export, a PDF report, a working ad-spend provider, and ROAS per platform on the report page and in the PDF. Next: **P4-T6** (encrypted credential storage, largely a documented pattern since no shipped provider needs credentials) and **P4-T7** (final regression). Phase 5 (access-log simulator page) remains deferred by request, with several of its design questions still open.
 
 ## Phase status
 | Phase | Status |
@@ -12,7 +12,7 @@ Update this file in place after every work session. It's a current-state snapsho
 | 1 — Scaffold + capture layer | **Complete (15/15)** — verified end to end in a real browser, reconciled exactly against a 300-visitor simulation, 104 unit + 26 integration tests green |
 | 2 — Funnel events + order attribution | **Complete (7/7)** — LUMA checkout adapter shipped, Hyvä left as a documented drop-in; full funnel `add_to_cart → checkout_start → checkout_step_shipping → checkout_step_payment → order_placed` confirmed live |
 | 3 — Aggregation + admin reporting | **Complete (8/8)** — nightly rollup + admin charts/grid, retention purge, summary reconciled exactly against both raw data and a seeded simulator run |
-| 4 — Export + ad-spend/ROAS | In Progress (4/7) — T1, T2, T3, T4 done |
+| 4 — Export + ad-spend/ROAS | In Progress (5/7) — T1–T5 done |
 | 5 — Access-log simulator page (new, requested 2026-09-19) | Deferred — requirements captured in TASKS.md, explicitly to start only after Phase 4 |
 
 ## Open decisions / blockers
@@ -72,6 +72,26 @@ Two details in the filter worth not "simplifying" later:
 - Validity is checked by asking MySQL (`SELECT ? REGEXP ?`), not `preg_match`. They are different engines, so a pattern PCRE accepts can still be rejected by the database, and the database is the only opinion that matters. An invalid pattern falls back to a literal match rather than erroring, because a half-typed expression is the normal state of a filter box; MySQL would otherwise raise 1139 and the grid would render as a failed request.
 
 **Verified** against seven beacon-realistic landings. Classification came out `paid` / `paid` / `paid` / `referral` / `referral` / `organic` / `direct`, and the log immediately surfaced genuine gaps: `twclid` and `mc_cid` URLs landing as `referral`, and `li_fat_id` / `epik` classified paid only via their medium with no platform recognised. Filters behaved exactly as intended — `gclid` → 1, `[?&][a-z_]*clid=` → 2, `[?&]utm_medium=(cpc|paid)` → 3, `twclid|epik|li_fat_id|mc_cid` → 4, invalid `utm_(` → 0 rows and no error, `%20` → correctly matched a percent-encoded URL. Other columns unaffected. Reflection on `Api\Data\EventInterface` passes on all 30 methods, so the new accessor cannot 500 the webapi. 137 unit tests green.
+
+### P4-T5 complete — ROAS per platform (2026-09-19)
+Return on ad spend (revenue / spend) is now shown as a per-platform table on the report page and as a "Return on Ad Spend by Platform" section in the PDF, both fed by `Model\Roas\RoasReportBuilder` so they cannot disagree.
+
+**Grain: one row per platform — the user's explicit instruction.** It also turned out to be the safe grain. Before being told, the plan had been platform + campaign; checking the data first showed why that needs care: spend is recorded per (date, platform, campaign) while a summary row is finer, and Meta already splits into facebook and instagram rows that share the same date, platform and campaign. A per-row ROAS would attach the same spend to both and count it twice. Rolling up to the platform avoids that, and also means a campaign spelled `Spring_Sale` in a spend file and `spring_sale` in the summary cannot cause a missed join. It is also why ROAS is NOT a column on the summary grid: spend comes from a provider rather than from the summary table, so it could not be sorted or filtered in SQL like the other derived columns, and at the grid's grain it would be wrong anyway.
+
+**Three states, deliberately kept apart**, because collapsing any two of them produces a number that misleads:
+- *Spend known and positive* → a real ROAS. That includes an exact **0.00x** — money went out and none came back, which is the most important result a merchant can see.
+- *Spend known and zero* → "n/a". Dividing by zero is not an infinite return; it means nothing was spent.
+- *Spend not known* → "no data", **never 0.00**. A ROAS of 0.00 would claim a platform's ads earned nothing, when the truth is that nobody has told us what they cost. In the seeded data `bing`, `reddit` and `tiktok` have no spend file, so they show "no data" while `meta` (spend 197.11, revenue 0) shows a genuine 0.00x.
+
+**Rows come from the union of two sources**: platforms in the summary AND platforms with a registered provider (`AdSpendProviderPool::getPlatformCodes()`, added for this). Starting from the summary alone would omit a platform that spent money but drew no traffic — exactly the case a merchant most needs to see.
+
+**The blended total leaves out revenue from platforms with no spend data.** Counting bing's 117.00 against only google's and meta's spend would divide all attributable revenue by part of the cost and inflate the headline precisely when the data is least complete. The page states how many platforms were excluded.
+
+**A failing provider is logged and treated as "no data"** for that platform without blanking the rest — a real API-backed provider will eventually hit an expired token or a rate limit.
+
+**Verified independently.** The builder's output was compared with a computation that shares none of its code — revenue straight from MySQL, spend by parsing the raw CSV files in Python (skipping malformed rows as the provider does): meta 197.11, google 185.59 (ROAS 0.6304), blended 382.70 spend / 117.00 revenue / 0.3057 — identical to the cent, and again on a 7-day range (google 1562.18, meta 1043.32) so multi-day summation is covered by real data as well as unit tests. The dashboard template was rendered through Magento's real layout, and the PDF's text extracted with `pdftotext`; it still fits one page. 15 new unit tests (194 total green), 0 phpcs errors; phpstan level 2 is clean on everything written here — its 5 remaining findings are in `BeaconConfig.php` and the two `Index` controllers, files this task did not change.
+
+**Limits, stated on the page itself:** revenue is base currency and spend is whatever the provider reports, so they only compare on a single-currency store; and the report covers the whole dataset rather than following the grid's filters (the charts do; ROAS cannot, for the reason above). Not yet verified in a browser.
 
 ### Two real bugs from live browser use, both fixed (2026-09-19)
 P4-T1/T2 were verified thoroughly at the PHP/DI level before shipping, but two things only surfaced when the user actually clicked the buttons in a browser — worth recording exactly why the earlier verification missed them.

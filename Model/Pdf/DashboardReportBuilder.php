@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Aavirbhava\AdsAnalytics\Model\Pdf;
 
+use Aavirbhava\AdsAnalytics\Model\Roas\RoasReportBuilder;
 use Magento\Framework\App\ResourceConnection;
 
 /**
@@ -14,18 +15,23 @@ use Magento\Framework\App\ResourceConnection;
 class DashboardReportBuilder
 {
     private ResourceConnection $resource;
+    private RoasReportBuilder $roasReportBuilder;
 
-    public function __construct(ResourceConnection $resource)
+    public function __construct(ResourceConnection $resource, RoasReportBuilder $roasReportBuilder)
     {
         $this->resource = $resource;
+        $this->roasReportBuilder = $roasReportBuilder;
     }
 
     /**
+     * The `roas` key holds exactly what RoasReportBuilder::build() returns.
+     *
      * @return array{
      *     from: string, to: string,
      *     funnel: array{visits: int, product_views: int, add_to_carts: int, checkout_starts: int, orders: int, revenue: float},
      *     by_traffic_type: array<int, array{traffic_type: string, visits: int, orders: int, revenue: float}>,
-     *     top_campaigns: array<int, array{platform_code: string, campaign: string, visits: int, orders: int, revenue: float}>
+     *     top_campaigns: array<int, array{platform_code: string, campaign: string, visits: int, orders: int, revenue: float}>,
+     *     roas: array<string, mixed>
      * }
      */
     public function build(string $from, string $to, int $topCampaignLimit = 10): array
@@ -110,6 +116,9 @@ class DashboardReportBuilder
             'funnel' => $funnel,
             'by_traffic_type' => $byTrafficType,
             'top_campaigns' => $topCampaigns,
+            // From the same calculator the dashboard uses, so the PDF and the
+            // page cannot disagree about a platform's ROAS.
+            'roas' => $this->roasReportBuilder->build($from, $to),
         ];
     }
 
