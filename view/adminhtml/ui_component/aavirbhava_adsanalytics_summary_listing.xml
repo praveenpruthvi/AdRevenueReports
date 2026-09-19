@@ -116,6 +116,18 @@
             </settings>
         </column>
 
+        <!--
+            Counts visits that reached a product page, not raw product
+            pageviews — see the column comment in etc/db_schema.xml. That is
+            what keeps this column comparable to Visits either side of it.
+        -->
+        <column name="product_views" sortOrder="75">
+            <settings>
+                <filter>textRange</filter>
+                <label translate="true">Product Views</label>
+            </settings>
+        </column>
+
         <column name="add_to_carts" sortOrder="80">
             <settings>
                 <filter>textRange</filter>
@@ -149,6 +161,14 @@
             like stored columns. Computing them in PHP would only ever cover
             the current page.
         -->
+        <column name="view_rate" sortOrder="115">
+            <settings>
+                <filter>textRange</filter>
+                <label translate="true">View Rate %</label>
+                <visible>false</visible>
+            </settings>
+        </column>
+
         <column name="cart_rate" sortOrder="120">
             <settings>
                 <filter>textRange</filter>

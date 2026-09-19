@@ -120,6 +120,17 @@
         <column xsi:type="varchar" name="medium" nullable="false" length="64" default="null_source" comment="Medium; 'null_source' when the raw row had none. Distinct from the resolver's 'none', which means a verified absence of medium on direct traffic. NOT NULL on purpose — see comment above."/>
         <column xsi:type="varchar" name="campaign" nullable="false" length="128" default="null_source" comment="Campaign; 'null_source' when the raw row had none. NOT NULL on purpose — see comment above."/>
         <column xsi:type="int" name="visits" padding="10" unsigned="true" nullable="false" default="0" comment="Visits"/>
+        <!--
+            Counts VISITS THAT REACHED A PRODUCT PAGE, not raw product
+            pageviews: one visit that views eight products contributes 1, not
+            8. That keeps this comparable to the columns either side of it, so
+            visits -> product_views -> add_to_carts -> checkout_starts ->
+            orders reads as one funnel and a rate over visits cannot exceed
+            100%. It also makes the figure immune to a beacon that fires twice
+            on the same page. If raw pageview volume is ever wanted it is a
+            separate metric and needs its own column.
+        -->
+        <column xsi:type="int" name="product_views" padding="10" unsigned="true" nullable="false" default="0" comment="Visits That Viewed At Least One Product"/>
         <column xsi:type="int" name="add_to_carts" padding="10" unsigned="true" nullable="false" default="0" comment="Add To Carts"/>
         <column xsi:type="int" name="checkout_starts" padding="10" unsigned="true" nullable="false" default="0" comment="Checkout Starts"/>
         <column xsi:type="int" name="orders" padding="10" unsigned="true" nullable="false" default="0" comment="Orders"/>

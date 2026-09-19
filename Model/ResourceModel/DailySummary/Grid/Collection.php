@@ -51,6 +51,12 @@ class Collection extends SearchResult implements SearchResultInterface
             'conversion_rate' => new \Zend_Db_Expr(
                 'ROUND(100 * orders / NULLIF(visits, 0), 2)'
             ),
+            // Bounded by 100% because product_views counts visits that
+            // reached a product page, not raw pageviews (see the column's
+            // comment in etc/db_schema.xml).
+            'view_rate' => new \Zend_Db_Expr(
+                'ROUND(100 * product_views / NULLIF(visits, 0), 2)'
+            ),
             'cart_rate' => new \Zend_Db_Expr(
                 'ROUND(100 * add_to_carts / NULLIF(visits, 0), 2)'
             ),

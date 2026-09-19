@@ -49,7 +49,17 @@ Adding a platform or a search engine = adding a row to its respective config lis
 `order_id` (PK/FK to sales_order), `visit_id` (FK), `attribution_model` (`first_touch`|`last_touch`), `traffic_type`, `source`, `medium`, `campaign`, `platform_code` (nullable).
 
 **`ads_analytics_daily_summary`** (cron-built, this is what admin reports read from)
-`summary_id` (PK), `date`, `traffic_type`, `platform_code` (**NOT NULL**, default `null_source`), `source` (**NOT NULL**, default `null_source`), `medium` (**NOT NULL**, default `null_source`), `campaign` (**NOT NULL**, default `null_source`), `visits`, `add_to_carts`, `checkout_starts`, `orders`, `revenue`. Unique key includes `traffic_type` alongside the existing slice.
+`summary_id` (PK), `date`, `traffic_type`, `platform_code` (**NOT NULL**, default `null_source`), `source` (**NOT NULL**, default `null_source`), `medium` (**NOT NULL**, default `null_source`), `campaign` (**NOT NULL**, default `null_source`), `visits`, `product_views`, `add_to_carts`, `checkout_starts`, `orders`, `revenue`. Unique key includes `traffic_type` alongside the existing slice.
+
+**`product_views` was added after Phase 3** (it was not in the original column list). Without it the funnel's widest stage was captured in `ads_analytics_funnel_event` but could never appear in a report, because admin grids read only from this table.
+
+It counts **visits that reached a product page, not raw product pageviews** — one visit that views eight products contributes 1, not 8. This is the one column whose aggregation is not a plain sum of events, so it is worth being explicit about why:
+
+- It keeps the column comparable to the ones either side of it, so `visits -> product_views -> add_to_carts -> checkout_starts -> orders` reads as a single funnel rather than mixing per-visitor and per-event units.
+- It bounds the derived `view_rate` at 100%. A per-event count would routinely exceed the visit count and make the rate meaningless.
+- It is immune to a beacon that fires twice on one page, which a per-event count would silently inflate.
+
+The aggregator implements this by collapsing to one row per (visit, day) in a derived table before summing (`DailySummaryAggregator::productViewFacts()`). If raw pageview volume is ever wanted, it is a different metric and needs its own column — do not redefine this one.
 
 Unlike `ads_analytics_visit` (where these same-named columns are nullable — a raw visit legitimately has no `platform_code` if it's organic), this table makes them **NOT NULL with a `'null_source'` sentinel default**.
 

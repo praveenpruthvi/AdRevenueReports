@@ -4,7 +4,7 @@ Update this file in place after every work session. It's a current-state snapsho
 
 **Last updated:** 2026-09-19
 **Current phase:** Phase 3 complete; Phase 4 (export + ad-spend/ROAS) not yet started
-**Current task:** Phases 1, 2 and 3 are all complete and verified against real data. The capture pipeline runs end to end in a real browser; a nightly cron rolls raw events into `ads_analytics_daily_summary`; the admin report page renders Chart.js funnel and traffic-type charts above a filterable grid that reads only from that summary; and a retention purge removes raw per-visitor data on its own configurable window. The summary has been reconciled exactly against both the raw tables (P3-T6) and a seeded simulator run (P3-T8). Next: **Phase 4** — Excel/PDF export, `Api/AdSpendProviderInterface`, and ROAS.
+**Current task:** Phases 1, 2 and 3 are all complete and verified against real data. The capture pipeline runs end to end in a real browser; a nightly cron rolls raw events into `ads_analytics_daily_summary`; the admin report page renders Chart.js funnel and traffic-type charts above a filterable grid that reads only from that summary; and a retention purge removes raw per-visitor data on its own configurable window. The summary has been reconciled exactly against both the raw tables (P3-T6) and a seeded simulator run (P3-T8). `product_views` has since been added to the summary and the report (see below), amending SPECS §3. Next: **Phase 4** — Excel/PDF export, `Api/AdSpendProviderInterface`, and ROAS.
 
 ## Phase status
 | Phase | Status |
@@ -29,6 +29,24 @@ _(none — the checkout-type decision was resolved 2026-09-19; see CLAUDE.md §R
   - Corrected the "skipping COALESCE duplicates rows" claim in `AggregateDailySummary`, `db_schema.xml` and SPECS §3 — with NOT NULL columns an explicit NULL raises MySQL 1048 and the cron fails loudly. Coalesce sentinel changed `'none'` → `'null_source'` so it stays distinct from the resolver's verified-absence `'none'`.
   - Reconciled rate-limit placement across SECURITY §4, TASKS P1-T9 and `EventIngestInterface`'s docblock (webapi layer, not the consumer); dropped the `platform_code` validation rule from SECURITY §2 since the value is always discarded and recomputed; corrected P1-T9b's false claim that tables are skipped without a schema whitelist.
 - Two earlier audit rounds against the scaffold found and fixed: a nullable-column unique-key bug in `ads_analytics_daily_summary` (silent duplicate rows), a sync-write contradiction between request logging and the async-only rule (resolved — `EventIngestService` is now publish-only, `EventConsumer` owns all DB writes including the request log), missing PHPDoc on webapi-facing interfaces, Instagram `platform_code` instability, and several `TrafficResolver` correctness bugs (case sensitivity, substring-vs-suffix search-engine matching, dropped UTM tagging, dropped campaign).
+
+### product_views added to the report (2026-09-19, post-Phase-3)
+Closes the gap flagged at P3-T6: `product_view` events were captured in `ads_analytics_funnel_event` but the summary table had no column for them, so the funnel's widest stage could never appear in a report. This required amending docs/SPECS.md §3, which had not listed the column.
+
+**It counts visits that reached a product page, not raw product pageviews.** This is the only column in the table whose aggregation is not a plain sum of events, and the reason matters: the beacon fires `product_view` on every product page, so a visitor browsing eight products raises eight events. Summing those would put `product_views` above `visits`, mixing per-visitor and per-event units in what is meant to read as one funnel, and would make any rate over visits exceed 100%. Deduplicating per visit also makes the figure immune to a beacon that double-fires on a page. `DailySummaryAggregator::productViewFacts()` implements it by collapsing to one row per (visit, day) in a derived table before summing.
+
+Also added `view_rate` to the grid (`100 * product_views / NULLIF(visits, 0)`), alongside the existing `cart_rate` and `conversion_rate`, and inserted a Product View stage into the dashboard funnel chart.
+
+**One incidental fix.** `aggregate()` built its bind list by hand as six values for three fact sources, behind a `$params = array_merge($bind, $bind, $bind)` line that was dead code — `$bind` is keyed, so the merge collapsed back to two entries and the values actually bound came from a separate literal list. Adding a fourth fact source would have made that list wrong. It is now derived from the fact-source array itself, so it cannot drift: too few values is an immediate PDO error, but too many, or the right count in the wrong order, would be a silently wrong report.
+
+**Verified:**
+- Per-slice diff between `summary.product_views` and an independently recomputed distinct-visit count returns zero rows.
+- The dedup is genuinely exercised, not vacuously true. On the first pass every visit had exactly one `product_view` (the simulator sends one per visitor), so distinct-visit and event counts were identical — the same trap as P3-T6's `add_to_carts`. 75 extra `product_view` events were seeded across 25 visits, taking the raw event count to 545 while `product_views` correctly stayed at 470.
+- No slice has `product_views > visits`.
+- 10 bounce visits (landed, never viewed a product) were seeded so the stage shows real drop-off rather than a flat 100%; the paid/google/spring_sale slice now reads 14 visits / 4 product views / 28.57% view rate.
+- `add_to_carts`, `checkout_starts`, `orders` and `revenue` were unchanged by the migration (37 / 54 / 6 / 468.00), and re-running the aggregation reports "0 summary row operations", so idempotency holds.
+- Both new columns resolve in the UI component; sorting and filtering work on them, since both are SQL-derived.
+- 127 unit tests green, 0 phpcs errors.
 
 ### P3-T8 complete — simulator reconciliation, and three simulator fixes (2026-09-19)
 The task is "run the simulator with a known seed and reconcile", but none of that worked as written, because of three defects already logged here as open:

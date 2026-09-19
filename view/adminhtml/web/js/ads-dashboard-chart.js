@@ -73,9 +73,16 @@ define([
          */
         function buildFunnel(rows) {
             return {
-                labels: [$t('Visits'), $t('Add to Cart'), $t('Checkout'), $t('Orders')],
+                labels: [
+                    $t('Visits'),
+                    $t('Product View'),
+                    $t('Add to Cart'),
+                    $t('Checkout'),
+                    $t('Orders')
+                ],
                 values: [
                     sum(rows, 'visits'),
+                    sum(rows, 'product_views'),
                     sum(rows, 'add_to_carts'),
                     sum(rows, 'checkout_starts'),
                     sum(rows, 'orders')
