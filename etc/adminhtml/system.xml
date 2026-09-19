@@ -30,7 +30,13 @@
                 <field id="attribution_model" translate="label" type="select" sortOrder="30" showInDefault="1" showInWebsite="1" showInStore="0">
                     <label>Primary Attribution Model</label>
                     <source_model>Aavirbhava\AdsAnalytics\Model\Config\Source\AttributionModel</source_model>
-                    <comment>docs/SPECS.md §4 — used to pick which touch populates ads_analytics_order_attribution.</comment>
+                    <comment><![CDATA[
+                        Which ad click gets credit for a sale, when a customer clicked more than one
+                        ad before buying. <b>Last Touch</b> (the default, and the industry standard)
+                        credits the ad that brought the customer back for their final visit before
+                        checkout. <b>First Touch</b> instead credits the very first ad that ever
+                        brought them to the store.
+                    ]]></comment>
                 </field>
                 <field id="aggregation_lookback_days" translate="label" type="text" sortOrder="34" showInDefault="1" showInWebsite="0" showInStore="0">
                     <label>Report Aggregation Lookback (days)</label>
@@ -69,13 +75,13 @@
             <group id="platforms" translate="label" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
                 <label>Traffic Classification (Platforms &amp; Search Engines)</label>
                 <comment><![CDATA[
-                    docs/SPECS.md &sect;2. These three lists are the ONLY place a
-                    platform, paid medium or search engine is named. Adding
-                    Pinterest, or a new regional search engine, is a row here
-                    and no code change anywhere (CLAUDE.md #2).
-                    Defaults ship in etc/config.xml, so the store works out of
-                    the box and a later module version can add a platform
-                    without an admin having to notice.
+                    These three lists control how a visit is classified as paid, organic, referral
+                    or direct traffic. To support a new ad platform (Pinterest, say) or a new
+                    regional search engine, just add a row below &mdash; nothing else needs to change.
+                    <br><br>
+                    Sensible defaults are already filled in, so the store works correctly out of the
+                    box; you only need to edit these if you use a platform or search engine that
+                    is not already listed.
                 ]]></comment>
                 <field id="platform_map" translate="label" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
                     <label>Paid Platform / Click-ID Map</label>
@@ -83,8 +89,8 @@
                     <backend_model>Magento\Config\Model\Config\Backend\Serialized\ArraySerialized</backend_model>
                     <comment><![CDATA[
                         <b>Click ID Parameter</b> is the signal that classifies a visit as paid, and it
-                        is client-supplied &mdash; the queue consumer rejects any value not listed here
-                        (docs/SECURITY.md &sect;2).<br/>
+                        comes from the URL a shopper actually arrives on &mdash; any value not listed
+                        here is rejected, so this list also acts as a safety check.<br/>
                         <b>Default Source</b> is what <code>source</code> becomes for this platform
                         (meta &rarr; facebook).<br/>
                         <b>Alt Sources</b> are <code>utm_source</code> values that override Default Source
@@ -134,28 +140,36 @@
                     <label>How to provide spend data</label>
                     <frontend_model>Aavirbhava\AdsAnalytics\Block\Adminhtml\System\Config\AdSpendNote</frontend_model>
                     <comment><![CDATA[
-                        ROAS (Model\Roas\RoasReportBuilder) needs a spend figure per platform, which the
-                        shipped provider reads from a CSV file &mdash; there is no field to type it into here.
+                        The ROAS (Return on Ad Spend) report needs to know how much you spent on ads
+                        for each platform. There is no field to type that in here &mdash; instead, you
+                        place a file on the server, and the report reads it from there.
                         <br><br>
-                        <strong>File location:</strong> <code>var/aavirbhava/adsanalytics/adspend/&lt;platform_code&gt;.csv</code>
-                        (relative to the Magento install root), e.g. <code>var/aavirbhava/adsanalytics/adspend/google.csv</code>.
-                        Only platforms with a provider registered in <code>etc/di.xml</code> are read &mdash;
-                        by default that is <code>google</code> and <code>meta</code>, both sharing the same
-                        credential-free CSV reader. A platform with no file, or a platform with no provider at
-                        all, shows &quot;no data&quot; in the ROAS report rather than a zero.
+                        <strong>Where to put the file:</strong> inside your Magento installation, at
+                        <code>var/aavirbhava/adsanalytics/adspend/&lt;platform&gt;.csv</code> &mdash;
+                        for example <code>var/aavirbhava/adsanalytics/adspend/google.csv</code> for
+                        Google, or <code>.../meta.csv</code> for Meta (Facebook/Instagram). Ask
+                        whoever manages your server/hosting to place it there if you do not have
+                        direct file access yourself. Currently only <b>Google</b> and <b>Meta</b> are
+                        supported this way; other platforms, or a platform with no file yet, simply
+                        show &quot;no data&quot; in the ROAS report rather than a zero.
                         <br><br>
-                        <strong>Format:</strong> a header row, then one row per day/campaign:
-                        <code>date,campaign,spend</code> &mdash; <code>date</code> as <code>YYYY-MM-DD</code>,
-                        <code>campaign</code> matching the campaign name used in this store's UTM tagging,
-                        <code>spend</code> a plain decimal in the store's currency with no symbol (e.g.
-                        <code>2026-09-19,spring_sale,42.50</code>). A malformed row is skipped and logged
-                        rather than rejecting the whole file.
+                        <strong>What the file should contain:</strong> a first row with the column
+                        names, then one row per day per campaign, like this:
+                        <br>
+                        <code>date,campaign,spend</code><br>
+                        <code>2026-09-19,spring_sale,42.50</code><br>
+                        <code>2026-09-19,brand_awareness,18.00</code>
                         <br><br>
-                        This is a reference implementation, not a live feed from the ad platform &mdash; nothing
-                        updates this file automatically. A deployment with real Google Ads / Meta Ads API
-                        access can replace it with its own provider implementing
-                        <code>Api\AdSpendProviderInterface</code>, registered the same way, without touching
-                        this module's core (docs/SPECS.md &sect;5).
+                        <code>date</code> is <code>YYYY-MM-DD</code>, <code>campaign</code> should
+                        match the campaign name you already use in your ad tracking links, and
+                        <code>spend</code> is a plain number in your store's currency (no currency
+                        symbol). A row with a mistake in it is skipped rather than breaking the
+                        whole file.
+                        <br><br>
+                        This is a manual, once-in-a-while file update, not a live feed &mdash; nothing
+                        updates it automatically. If you want your ad spend to update on its own
+                        from Google Ads or Meta Ads, ask your developer; that can be added without
+                        changing how this report itself works.
                     ]]></comment>
                 </field>
             </group>
@@ -163,14 +177,14 @@
             <group id="rate_limit" translate="label" sortOrder="25" showInDefault="1" showInWebsite="1" showInStore="0">
                 <label>Ingest Rate Limiting</label>
                 <comment><![CDATA[
-                    docs/SECURITY.md &sect;4. Enforced in <code>Model\EventIngestService</code>, at the
-                    webapi layer &mdash; deliberately NOT in the queue consumer, because by the time a
-                    consumer runs the request has already been accepted and queued, so a limit there
-                    sheds no load at all. Counters are cache-backed (never DB) and keyed on
-                    <code>ip_hash</code> + <code>visitor_uuid</code> together: the uuid alone is
-                    client-generated and rotatable, the ip alone is shared behind NAT.<br/>
-                    Over the limit, events are dropped silently and the caller still gets a 200 &mdash;
-                    a tracking beacon must never surface its state to the storefront.
+                    Limits how many tracking events a single visitor can send in a short time, to
+                    stop a bot or a scripted attack from flooding your store's tracking data. The
+                    limit is applied per visitor together with their network address, so it cannot
+                    be avoided by simply generating new visitor IDs.
+                    <br><br>
+                    Going over the limit never shows an error to the shopper &mdash; it just quietly
+                    stops recording further events for that visitor until the window below resets.
+                    A tracking feature must never slow down or interrupt browsing or checkout.
                 ]]></comment>
                 <field id="max_requests" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
                     <label>Max Requests Per Window</label>
@@ -188,12 +202,12 @@
                 <field id="logging_level" translate="label" type="select" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
                     <label>Logging Level</label>
                     <source_model>Aavirbhava\AdsAnalytics\Model\Config\Source\LoggingLevel</source_model>
-                    <comment><![CDATA[docs/SPECS.md §9. <b>Rejected + Externally Referred</b> (default) logs invalid requests plus landings that arrived from a paid, organic or referral source — the ones whose URL can reveal a campaign parameter this module does not yet recognise. Direct arrivals and internal funnel events are not logged, because their URL carries no inbound source. Use <b>All Requests</b> temporarily when debugging the funnel itself; it stores raw payloads and full query strings for every request.]]></comment>
+                    <comment><![CDATA[<b>Rejected + Externally Referred</b> (the default) logs failed/invalid requests plus visits that arrived from an ad, a search engine or another website — these are the ones most likely to reveal a tracking parameter this store does not yet recognise. Visits where the shopper typed the address directly, or used a bookmark, are not logged, since there is nothing external to learn from. Switch to <b>All Requests</b> only temporarily, if you need to debug the full visitor journey — note that this stores the complete raw data for every single request.]]></comment>
                 </field>
                 <field id="request_log_retention_days" translate="label" type="text" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
                     <label>Request Log Retention (days)</label>
                     <validate>validate-digits validate-greater-than-zero</validate>
-                    <comment>docs/SECURITY.md §8 — kept shorter than analytics-table retention below.</comment>
+                    <comment>Kept shorter than the retention period below, since this log stores raw incoming request data rather than a summarised report.</comment>
                 </field>
             </group>
 
@@ -202,7 +216,7 @@
                 <field id="event_retention_days" translate="label" type="text" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
                     <label>Raw Visit/Funnel Event Retention (days)</label>
                     <validate>validate-digits validate-greater-than-zero</validate>
-                    <comment>Aggregated daily summary is retained indefinitely regardless of this setting.</comment>
+                    <comment>Your daily summary reports (the dashboard and grid) are kept forever no matter what you set here — this only controls how long the detailed, per-visitor data is kept.</comment>
                 </field>
             </group>
         </section>
