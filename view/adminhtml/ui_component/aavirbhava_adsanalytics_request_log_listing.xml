@@ -79,6 +79,30 @@
             </childDefaults>
         </settings>
 
+        <!--
+            P4-T1 fix: Magento_Ui's exportButton widget reads the export
+            namespace/filters through a "selections" module resolved via its
+            selectProvider ("ns = ${ $.ns }, index = ids"), which points at
+            a component literally named "ids" in this same namespace —
+            i.e. exactly this <selectionsColumn>. Without it, clicking
+            Export sends a request with NO namespace param at all, and
+            Magento\Framework\View\Element\UiComponentFactory::create(null)
+            throws "Undefined array key \"attributes\"" (PHP 8 turns that
+            E_WARNING into a fatal error via Magento's own error handler).
+            Every stock Magento grid that ships an <exportButton> also ships
+            a <selectionsColumn> for exactly this reason — there is no core
+            example of the two without the other. This does not add mass
+            actions (no <massaction> block, so no bulk-action toolbar
+            appears) — it only wires the underlying selection state the
+            export button's default "export everything matching the current
+            filters" behaviour depends on.
+        -->
+        <selectionsColumn name="ids" sortOrder="5">
+            <settings>
+                <indexField>log_id</indexField>
+            </settings>
+        </selectionsColumn>
+
         <column name="log_id" sortOrder="10">
             <settings>
                 <filter>textRange</filter>

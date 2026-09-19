@@ -9,6 +9,7 @@ use Magento\Backend\App\Action;
 use Magento\Backend\App\Action\Context;
 use Magento\Framework\App\Action\HttpGetActionInterface;
 use Magento\Framework\App\Filesystem\DirectoryList;
+use Magento\Framework\App\ResponseInterface;
 use Magento\Framework\App\Response\Http\FileFactory;
 use Magento\Framework\Controller\Result\Redirect;
 use Magento\Framework\Controller\ResultFactory;
@@ -56,7 +57,18 @@ class Pdf extends Action implements HttpGetActionInterface
         $this->logger = $logger;
     }
 
-    public function execute(): ResultInterface
+    /**
+     * Return type is a union, not plain ResultInterface, because the success
+     * path returns whatever FileFactory::create() hands back — a
+     * ResponseInterface with the PDF streamed as its body — while every
+     * validation/error path returns a Redirect (a ResultInterface). Declaring
+     * only ResultInterface here is what core's own equivalent
+     * (Magento\Sales\Controller\Adminhtml\Order\PdfDocumentsMassAction::execute())
+     * avoids by not declaring a return type at all; a real TypeError was
+     * caught in manual testing from exactly this mismatch before the type
+     * was corrected.
+     */
+    public function execute(): ResponseInterface|ResultInterface
     {
         [$from, $to, $error] = $this->resolveRange();
 
