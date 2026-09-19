@@ -32,7 +32,13 @@ class RequestLogWriter
 {
     private const ENDPOINT = '/V1/adsanalytics/event';
     
-    /** Matches ads_analytics_request_log.page_url width (etc/db_schema.xml). */
+    /**
+     * A defensive cap, not a column-width match: page_url is xsi:type="text"
+     * (unbounded, up to MySQL's 65,535-byte TEXT limit — see the comment on
+     * that column in etc/db_schema.xml for why it cannot be a length-bounded
+     * varchar). 2048 covers real-world URLs with headroom while still
+     * stopping a pathological caller-supplied URL from bloating this row.
+     */
     private const MAX_PAGE_URL_LENGTH = 2048;
 
     /** Matches ads_analytics_request_log.referrer_host width. */

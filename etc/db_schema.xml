@@ -176,8 +176,20 @@
             already holds raw payloads and is purged on the short retention
             window (docs/SECURITY.md sections 6 and 8), and never reaches the
             visit, funnel or summary tables.
+
+            xsi:type="text", not varchar: Magento's declarative schema caps
+            varchar at 1024 characters (Setup/Declaration/Schema/etc/types/texts/varchar.xsd
+            — a real, enforced XSD limit, not a guideline), which a URL can
+            exceed. A varchar length above that is not a MySQL problem, since
+            MySQL itself allows much longer varchars; it is rejected at
+            `bin/magento setup:upgrade` with "[facet 'maxInclusive'] ... is
+            greater than the maximum value allowed" — caught here only by the
+            P1-T10 integration suite's fresh-database install, since applying
+            the schema to an already-running dev database via repeated
+            setup:upgrade calls does not re-validate the XSD the same way a
+            clean install does. text has no such cap.
         -->
-        <column xsi:type="varchar" name="page_url" nullable="true" length="2048" comment="Full Request URL Including Query String"/>
+        <column xsi:type="text" name="page_url" nullable="true" comment="Full Request URL Including Query String"/>
         <!--
             The traffic type TrafficResolver actually decided, stored on
             accepted landings so a misclassification is visible next to the

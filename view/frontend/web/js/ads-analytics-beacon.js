@@ -210,8 +210,9 @@
     }
 
     /**
-     * The full current URL, query string included, capped at the width of
-     * ads_analytics_request_log.page_url.
+     * The full current URL, query string included, capped defensively at
+     * 2048 characters (matching RequestLogWriter::MAX_PAGE_URL_LENGTH — the
+     * column itself is unbounded text, not a fixed-width field).
      *
      * Sent on EVERY event, not just the landing, and deliberately NOT
      * stripped of its query string. landing_page carries the path for
