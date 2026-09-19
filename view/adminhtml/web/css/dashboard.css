@@ -1,14 +1,62 @@
 /* P3-T4. A stylesheet rather than an inline <style>: keeps the markup free of
-   anything a tightened style-src CSP would object to later. */
-.aavirbhava-ads-charts { margin-bottom: 20px; }
+   anything a tightened style-src CSP would object to later.
+
+   NOTE ON PADDING: Magento's own .admin__fieldset-wrapper-content only adds
+   padding around a DIRECT CHILD .admin__fieldset (a real config form
+   fieldset) — see forms/_fields.less. None of the sections on this page use
+   that markup (they are plain divs/tables/paragraphs, not config forms), so
+   every one of them needs its OWN padding declared here; there is no
+   built-in fallback. Missing this on two sections (ROAS, ad-spend upload) is
+   exactly what produced the "no spacing, everything flush against the edge"
+   look reported after the ad-spend upload form shipped — fixed below by
+   giving every section's content area the same treatment
+   .aavirbhava-ads-charts__content already had. */
+
+.aavirbhava-ads-charts { margin-bottom: 24px; }
 .aavirbhava-ads-charts__content { padding: 20px; display: flex; flex-wrap: wrap; gap: 24px; }
 .aavirbhava-ads-charts__panel { flex: 1 1 320px; min-width: 280px; height: 300px; position: relative; }
 .aavirbhava-ads-charts__title { font-weight: 600; margin: 0 0 8px; color: #303030; }
 .aavirbhava-ads-charts__empty { flex-basis: 100%; color: #6d7278; text-align: center; margin: 40px 0; }
 .aavirbhava-ads-charts__note { flex-basis: 100%; color: #6d7278; font-size: 1.2rem; margin: 0; }
-.aavirbhava-ads-charts__pdf-link { flex-basis: 100%; display: inline-block; width: max-content; margin-top: .8rem; }
-.aavirbhava-ads-roas { margin-top: 2rem; }
+.aavirbhava-ads-charts__pdf-link { flex-basis: 100%; display: inline-block; width: max-content; margin-top: 16px; }
+
+.aavirbhava-ads-roas,
+.aavirbhava-ads-spend-upload { margin: 24px 0; }
+.aavirbhava-ads-roas > .admin__fieldset-wrapper-content,
+.aavirbhava-ads-spend-upload > .admin__fieldset-wrapper-content { padding: 20px; }
+
+/* A note paragraph directly under the title, or directly above/below a
+   table, previously sat with zero gap on either side — both sections' notes
+   now get real breathing room, not just the upload one. */
+.aavirbhava-ads-roas .aavirbhava-ads-charts__note,
+.aavirbhava-ads-spend-upload .aavirbhava-ads-charts__note { margin: 0 0 20px; }
+.aavirbhava-ads-roas .admin__table-wrapper + .aavirbhava-ads-charts__note { margin: 20px 0 0; }
+
+.aavirbhava-ads-roas__table { margin-bottom: 0; }
+.aavirbhava-ads-roas__table th,
+.aavirbhava-ads-roas__table td { padding: 10px 12px; }
 .aavirbhava-ads-roas__table ._right { text-align: right; }
-.aavirbhava-ads-spend-upload { margin-top: 2rem; }
-.aavirbhava-ads-spend-upload__form { display: flex; align-items: center; gap: .8rem; }
-.aavirbhava-ads-spend-upload__warning { color: #e02b27; font-size: 1.1rem; }
+.aavirbhava-ads-spend-upload__table { margin-top: 4px; }
+.aavirbhava-ads-spend-upload__table th,
+.aavirbhava-ads-spend-upload__table td { padding: 14px 16px; vertical-align: middle; }
+
+.aavirbhava-ads-spend-upload__status { line-height: 1.6; }
+
+/* The row-count line and the skipped-rows warning below it were touching
+   (a bare <br> with no margin); this gives the warning its own line of
+   space and visually separates it as a secondary, less-important detail. */
+.aavirbhava-ads-spend-upload__warning {
+    display: block;
+    margin-top: 4px;
+    color: #e02b27;
+    font-size: 1.1rem;
+}
+
+.aavirbhava-ads-spend-upload__form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+}
+
+.aavirbhava-ads-spend-upload__form input[type="file"] { max-width: 220px; }

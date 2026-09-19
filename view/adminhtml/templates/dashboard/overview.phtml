@@ -157,8 +157,9 @@ $platforms = $block->getAdSpendPlatforms();
                 <?= $escaper->escapeHtml(__(
                     'Upload a CSV file for each platform to feed the ROAS report above. The file needs a '
                     . 'header row, then one row per day per campaign: date,campaign,spend — for example '
-                    . '2026-09-19,spring_sale,42.50. Uploading a new file replaces the previous one for that '
-                    . 'platform.'
+                    . '2026-09-19,spring_sale,42.50. Spend must be a plain number, with no currency symbol '
+                    . 'and no thousands separator (1234.56, not 1,234.56 — this is the most common reason a '
+                    . 'row gets skipped). Uploading a new file replaces the previous one for that platform.'
                 )) ?>
             </p>
             <div class="admin__table-wrapper">
@@ -175,25 +176,26 @@ $platforms = $block->getAdSpendPlatforms();
                             <tr>
                                 <td><?= $escaper->escapeHtml($platform['label']) ?></td>
                                 <td>
-                                    <?php if ($platform['exists']): ?>
-                                        <?= $escaper->escapeHtml(
-                                            __(
-                                                '%1 rows, updated %2',
-                                                $platform['validRows'],
-                                                $platform['modifiedAt']
-                                            )
-                                        ) ?>
-                                        <?php if ($platform['skippedRows'] > 0): ?>
-                                            <br>
-                                            <span class="aavirbhava-ads-spend-upload__warning">
-                                                <?= $escaper->escapeHtml(
-                                                    __('%1 rows in this file could not be read', $platform['skippedRows'])
-                                                ) ?>
-                                            </span>
+                                    <div class="aavirbhava-ads-spend-upload__status">
+                                        <?php if ($platform['exists']): ?>
+                                            <?= $escaper->escapeHtml(
+                                                __(
+                                                    '%1 rows, updated %2',
+                                                    $platform['validRows'],
+                                                    $platform['modifiedAt']
+                                                )
+                                            ) ?>
+                                            <?php if ($platform['skippedRows'] > 0): ?>
+                                                <span class="aavirbhava-ads-spend-upload__warning">
+                                                    <?= $escaper->escapeHtml(
+                                                        __('%1 rows in this file could not be read', $platform['skippedRows'])
+                                                    ) ?>
+                                                </span>
+                                            <?php endif; ?>
+                                        <?php else: ?>
+                                            <?= $escaper->escapeHtml(__('No file uploaded yet')) ?>
                                         <?php endif; ?>
-                                    <?php else: ?>
-                                        <?= $escaper->escapeHtml(__('No file uploaded yet')) ?>
-                                    <?php endif; ?>
+                                    </div>
                                 </td>
                                 <td>
                                     <form method="post"

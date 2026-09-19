@@ -4,20 +4,26 @@
 
     <!--
         Extensibility point (docs/SPECS.md §5, P4-T3/P4-T4).
-        A client project adds a new ad-spend provider (e.g. Reddit, Pinterest)
-        by adding an <item> here in ITS OWN di.xml — never edit this array
-        in this module's core to add a platform.
+        A client project adds a REAL, non-CSV ad-spend provider (a live
+        Google Ads / Meta Ads API integration, say) by adding an <item> here
+        in ITS OWN di.xml — never edit this array in this module's core to
+        add a platform.
 
-        google and meta are registered against the SAME class,
-        Model\AdSpendProvider\CsvAdSpendProvider, which is the point:
-        platform_code arrives as a getSpend() argument, not a constructor
-        one, so one generic, credential-free implementation serves every
-        platform that has not been given a real API-backed provider. A
-        deployment with real Google Ads / Meta Ads API access replaces either
-        line with its own provider class in ITS OWN di.xml (P4-T6 covers
-        storing that provider's credentials); until then, both platforms read
-        var/aavirbhava/adsanalytics/adspend/<platform_code>.csv, and simply
-        have no data if that file does not exist.
+        This array does NOT need an entry for every platform any more.
+        Model\AdSpendProviderPool falls back to the generic
+        Model\AdSpendProvider\CsvAdSpendProvider for ANY platform already
+        listed in "Paid Platform / Click-ID Map" (Stores > Configuration >
+        Aavirbhava > Ads Analytics > Platforms — the same admin-editable list
+        TrafficResolver classifies traffic against), which is what makes the
+        CSV upload option on the report page work for every platform a store
+        actually uses, including ones added to that list after this module
+        was installed, with no developer involvement. google and meta are
+        still listed explicitly below only to demonstrate the OVERRIDE
+        pattern — a deployment with real API access replaces either line
+        with its own provider class, which then wins over the generic
+        fallback for that platform specifically; removing these two lines
+        entirely would change nothing today, since both already fall back to
+        the exact same class.
     -->
     <type name="Aavirbhava\AdsAnalytics\Model\AdSpendProviderPool">
         <arguments>

@@ -164,9 +164,12 @@
                         <br><br>
                         <code>date</code> is <code>YYYY-MM-DD</code>, <code>campaign</code> should
                         match the campaign name you already use in your ad tracking links, and
-                        <code>spend</code> is a plain number in your store's currency (no currency
-                        symbol). A row with a mistake in it is skipped rather than rejecting the
-                        whole file, and uploading a new file replaces the previous one for that
+                        <code>spend</code> is a plain number in your store's currency &mdash; no
+                        currency symbol (<code>$</code>) and no thousands separator
+                        (<code>1234.56</code>, not <code>1,234.56</code>; this trips people up most
+                        often when copying a currency-formatted column straight out of Excel or
+                        Google Sheets). A row with a mistake in it is skipped rather than rejecting
+                        the whole file, and uploading a new file replaces the previous one for that
                         platform.
                         <br><br>
                         This is a manual, once-in-a-while update, not a live feed &mdash; nothing

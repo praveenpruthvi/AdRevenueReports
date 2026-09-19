@@ -4,7 +4,9 @@ declare(strict_types=1);
 namespace Aavirbhava\AdsAnalytics\Test\Unit\Model\Roas;
 
 use Aavirbhava\AdsAnalytics\Api\AdSpendProviderInterface;
+use Aavirbhava\AdsAnalytics\Model\AdSpendProvider\CsvAdSpendProvider;
 use Aavirbhava\AdsAnalytics\Model\AdSpendProviderPool;
+use Aavirbhava\AdsAnalytics\Model\Config\TrafficClassificationConfig;
 use Aavirbhava\AdsAnalytics\Model\Roas\RoasReportBuilder;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\DB\Adapter\AdapterInterface;
@@ -52,7 +54,15 @@ class RoasReportBuilderTest extends TestCase
         $dateTime = $this->createMock(DateTime::class);
         $dateTime->method('gmtDate')->willReturn('2026-09-19');
 
-        return new RoasReportBuilder($resource, new AdSpendProviderPool($providers), $dateTime, $this->logger);
+        // Empty platform map: this test class is only exercising which
+        // PROVIDERS resolve, not AdSpendProviderPool's separate "fall back
+        // to CSV for any admin-configured platform" behaviour, which has its
+        // own dedicated test class (AdSpendProviderPoolTest).
+        $classificationConfig = $this->createMock(TrafficClassificationConfig::class);
+        $classificationConfig->method('getPlatformMap')->willReturn([]);
+        $pool = new AdSpendProviderPool($classificationConfig, $this->createMock(CsvAdSpendProvider::class), $providers);
+
+        return new RoasReportBuilder($resource, $pool, $dateTime, $this->logger);
     }
 
     /** @param array<int, array{date?: string, campaign?: string, spend: float}> $entries */
