@@ -2,9 +2,18 @@
 <config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
         xsi:noNamespaceSchemaLocation="urn:magento:module:Magento_Config:etc/system_file.xsd">
     <system>
-        <section id="aavirbhava_adsanalytics" translate="label" sortOrder="200" showInDefault="1" showInWebsite="1" showInStore="0">
+        <!--
+            Grouped under the shared "Aavirbhava" tab, declared by
+            Aavirbhava_SalesAnalytics's own system.xml (<tab id="aavirbhava">) —
+            not redeclared here. Magento merges <tab> nodes by id across every
+            module's system.xml, so declaring it a second time with the same id
+            is unnecessary; this section only needs to reference it. sortOrder
+            20 places this section after Sales Analytics (10) in that tab.
+        -->
+        <section id="aavirbhava_adsanalytics" translate="label" sortOrder="20" showInDefault="1" showInWebsite="1" showInStore="0">
+            <class>separator-top</class>
             <label>Ads Analytics</label>
-            <tab>service</tab>
+            <tab>aavirbhava</tab>
             <resource>Aavirbhava_AdsAnalytics::config</resource>
 
             <group id="general" translate="label" sortOrder="10" showInDefault="1" showInWebsite="1" showInStore="0">
@@ -104,6 +113,49 @@
                         so <code>notgoogle.com</code> does not match but <code>mail.google.com</code> does.
                         Wildcards are unsupported by design: list each TLD as its own row mapping to the
                         same engine name (<code>yandex.com</code> and <code>yandex.ru</code> &rarr; <code>yandex</code>).
+                    ]]></comment>
+                </field>
+            </group>
+
+            <!--
+                P4-T5 follow-up. Ad spend (used to compute ROAS) is not a
+                config VALUE — it comes from whichever provider is registered
+                in AdSpendProviderPool (etc/di.xml), and CsvAdSpendProvider,
+                the only one this module ships, reads a file rather than a
+                setting. There is nothing here to save, so this group holds a
+                single read-only note field (AdSpendNote) rather than an
+                actual input, purely so the file's location and format are
+                discoverable from the admin UI — without it, a merchant has no
+                way to find either without reading source code or docs.
+            -->
+            <group id="ad_spend" translate="label" sortOrder="22" showInDefault="1" showInWebsite="0" showInStore="0">
+                <label>Ad Spend Data (ROAS)</label>
+                <field id="note" translate="label comment" type="label" sortOrder="10" showInDefault="1">
+                    <label>How to provide spend data</label>
+                    <frontend_model>Aavirbhava\AdsAnalytics\Block\Adminhtml\System\Config\AdSpendNote</frontend_model>
+                    <comment><![CDATA[
+                        ROAS (Model\Roas\RoasReportBuilder) needs a spend figure per platform, which the
+                        shipped provider reads from a CSV file &mdash; there is no field to type it into here.
+                        <br><br>
+                        <strong>File location:</strong> <code>var/aavirbhava/adsanalytics/adspend/&lt;platform_code&gt;.csv</code>
+                        (relative to the Magento install root), e.g. <code>var/aavirbhava/adsanalytics/adspend/google.csv</code>.
+                        Only platforms with a provider registered in <code>etc/di.xml</code> are read &mdash;
+                        by default that is <code>google</code> and <code>meta</code>, both sharing the same
+                        credential-free CSV reader. A platform with no file, or a platform with no provider at
+                        all, shows &quot;no data&quot; in the ROAS report rather than a zero.
+                        <br><br>
+                        <strong>Format:</strong> a header row, then one row per day/campaign:
+                        <code>date,campaign,spend</code> &mdash; <code>date</code> as <code>YYYY-MM-DD</code>,
+                        <code>campaign</code> matching the campaign name used in this store's UTM tagging,
+                        <code>spend</code> a plain decimal in the store's currency with no symbol (e.g.
+                        <code>2026-09-19,spring_sale,42.50</code>). A malformed row is skipped and logged
+                        rather than rejecting the whole file.
+                        <br><br>
+                        This is a reference implementation, not a live feed from the ad platform &mdash; nothing
+                        updates this file automatically. A deployment with real Google Ads / Meta Ads API
+                        access can replace it with its own provider implementing
+                        <code>Api\AdSpendProviderInterface</code>, registered the same way, without touching
+                        this module's core (docs/SPECS.md &sect;5).
                     ]]></comment>
                 </field>
             </group>
