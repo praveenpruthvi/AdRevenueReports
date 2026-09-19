@@ -9,3 +9,6 @@
 .aavirbhava-ads-charts__pdf-link { flex-basis: 100%; display: inline-block; width: max-content; margin-top: .8rem; }
 .aavirbhava-ads-roas { margin-top: 2rem; }
 .aavirbhava-ads-roas__table ._right { text-align: right; }
+.aavirbhava-ads-spend-upload { margin-top: 2rem; }
+.aavirbhava-ads-spend-upload__form { display: flex; align-items: center; gap: .8rem; }
+.aavirbhava-ads-spend-upload__warning { color: #e02b27; font-size: 1.1rem; }

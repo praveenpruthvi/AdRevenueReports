@@ -91,6 +91,10 @@ Unlike `ads_analytics_visit` (where these same-named columns are nullable — a 
 ```
 A client-project module can add `<item name="reddit" .../>` in its own `di.xml` with zero edits here — this is the actual extension point for "add another platform later." (Ad spend/ROAS applies to `traffic_type=paid` only — organic/direct/referral have no spend concept.)
 
+**Shipped implementation: `Model\AdSpendProvider\CsvAdSpendProvider`**, registered for `google` and `meta`. Reads `var/aavirbhava/adsanalytics/adspend/<platform_code>.csv` (`date,campaign,spend`, header row required). Row-validity parsing lives in `Model\AdSpendProvider\AdSpendCsvFile`, shared between the read path and the admin upload path described below, so a file that uploads successfully and a file that reads successfully can never disagree about which rows are valid.
+
+**Admin upload, not file-drop only.** `Controller\Adminhtml\AdSpend\Upload` (gated on `Aavirbhava_AdsAnalytics::config`) lets an admin without server filesystem access upload a CSV for any registered platform from the report page itself (`view/adminhtml/templates/dashboard/overview.phtml`, "Ad Spend Data" section — hidden entirely for an admin who lacks that ACL resource, via `Block\Adminhtml\Dashboard::canManageAdSpendData()`). Uploading validates the file through `AdSpendCsvFile` before writing anything: a file with zero valid rows is rejected outright rather than silently replacing a working spend file with an empty one, and a file with some valid rows is accepted with the skip count/reasons reported back. A new upload for a platform always replaces its previous file.
+
 ## 6. Frontend capture (Hyvä-compatible)
 - Single vanilla-JS file, no RequireJS/Knockout. Loaded via layout XML `<script>` (or Hyvä's hook system if present).
 - On page load: parses `URLSearchParams` and reads `document.referrer`, sends both raw to the backend (classification happens server-side, per §2 — the client never decides `traffic_type`). Sets/refreshes first-party cookie `aavirbhava_visitor_uuid`.

@@ -124,6 +124,99 @@ $formatMoney = static fn (float $amount): string => number_format($amount, 2);
         <?php endif; ?>
     </div>
 </div>
+<?php if ($block->canManageAdSpendData()): ?>
+<?php
+/**
+ * Upload option for the ad-spend CSV, added after shipping the file-drop-only
+ * version: not every admin has access to the server's filesystem to place a
+ * file at var/aavirbhava/adsanalytics/adspend/<platform>.csv by hand.
+ *
+ * One form per platform (each with its own hidden platform_code and file
+ * input) rather than one shared dropdown-plus-file-picker: a merchant
+ * uploads one platform's export at a time, and a row-per-platform layout
+ * keeps "which platform is this file for" unambiguous without JavaScript.
+ *
+ * Only shown to an admin who holds Aavirbhava_AdsAnalytics::config — see
+ * Block\Adminhtml\Dashboard::canManageAdSpendData() — since that is the same
+ * permission Controller\Adminhtml\AdSpend\Upload requires; nobody sees a
+ * form they are not allowed to submit.
+ */
+$platforms = $block->getAdSpendPlatforms();
+?>
+<div class="admin__fieldset-wrapper aavirbhava-ads-spend-upload">
+    <div class="admin__fieldset-wrapper-title">
+        <strong><?= $escaper->escapeHtml(__('Ad Spend Data')) ?></strong>
+    </div>
+    <div class="admin__fieldset-wrapper-content">
+        <?php if (empty($platforms)): ?>
+            <p class="aavirbhava-ads-charts__note">
+                <?= $escaper->escapeHtml(__('No ad-spend platforms are set up yet.')) ?>
+            </p>
+        <?php else: ?>
+            <p class="aavirbhava-ads-charts__note">
+                <?= $escaper->escapeHtml(__(
+                    'Upload a CSV file for each platform to feed the ROAS report above. The file needs a '
+                    . 'header row, then one row per day per campaign: date,campaign,spend — for example '
+                    . '2026-09-19,spring_sale,42.50. Uploading a new file replaces the previous one for that '
+                    . 'platform.'
+                )) ?>
+            </p>
+            <div class="admin__table-wrapper">
+                <table class="data-grid aavirbhava-ads-spend-upload__table">
+                    <thead>
+                        <tr>
+                            <th class="data-grid-th"><?= $escaper->escapeHtml(__('Platform')) ?></th>
+                            <th class="data-grid-th"><?= $escaper->escapeHtml(__('Current Data')) ?></th>
+                            <th class="data-grid-th"><?= $escaper->escapeHtml(__('Upload New File')) ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($platforms as $platform): ?>
+                            <tr>
+                                <td><?= $escaper->escapeHtml($platform['label']) ?></td>
+                                <td>
+                                    <?php if ($platform['exists']): ?>
+                                        <?= $escaper->escapeHtml(
+                                            __(
+                                                '%1 rows, updated %2',
+                                                $platform['validRows'],
+                                                $platform['modifiedAt']
+                                            )
+                                        ) ?>
+                                        <?php if ($platform['skippedRows'] > 0): ?>
+                                            <br>
+                                            <span class="aavirbhava-ads-spend-upload__warning">
+                                                <?= $escaper->escapeHtml(
+                                                    __('%1 rows in this file could not be read', $platform['skippedRows'])
+                                                ) ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        <?= $escaper->escapeHtml(__('No file uploaded yet')) ?>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <form method="post"
+                                          enctype="multipart/form-data"
+                                          action="<?= $escaper->escapeUrl($block->getAdSpendUploadUrl()) ?>"
+                                          class="aavirbhava-ads-spend-upload__form">
+                                        <input name="form_key" type="hidden" value="<?= $escaper->escapeHtmlAttr($block->getFormKey()) ?>">
+                                        <input name="platform_code" type="hidden" value="<?= $escaper->escapeHtmlAttr($platform['code']) ?>">
+                                        <input name="ad_spend_csv" type="file" accept=".csv,text/csv" required>
+                                        <button type="submit" class="action-secondary">
+                                            <span><?= $escaper->escapeHtml(__('Upload')) ?></span>
+                                        </button>
+                                    </form>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
+</div>
+<?php endif; ?>
 <script type="text/x-magento-init">
 {
     "#aavirbhava-ads-funnel-canvas": {

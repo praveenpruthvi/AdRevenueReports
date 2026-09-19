@@ -130,9 +130,15 @@
                 the only one this module ships, reads a file rather than a
                 setting. There is nothing here to save, so this group holds a
                 single read-only note field (AdSpendNote) rather than an
-                actual input, purely so the file's location and format are
-                discoverable from the admin UI — without it, a merchant has no
-                way to find either without reading source code or docs.
+                actual input. The note points at the real upload form, which
+                lives on the report page itself (Reports > Ads Analytics —
+                see the "Ad Spend Data" section in
+                view/adminhtml/templates/dashboard/overview.phtml, backed by
+                Controller\Adminhtml\AdSpend\Upload) rather than here, since
+                Magento's config form does not support a file input the way a
+                custom page can. This field exists purely so the option is
+                discoverable from Stores > Configuration too, for an admin who
+                lands here first.
             -->
             <group id="ad_spend" translate="label" sortOrder="22" showInDefault="1" showInWebsite="0" showInStore="0">
                 <label>Ad Spend Data (ROAS)</label>
@@ -141,20 +147,16 @@
                     <frontend_model>Aavirbhava\AdsAnalytics\Block\Adminhtml\System\Config\AdSpendNote</frontend_model>
                     <comment><![CDATA[
                         The ROAS (Return on Ad Spend) report needs to know how much you spent on ads
-                        for each platform. There is no field to type that in here &mdash; instead, you
-                        place a file on the server, and the report reads it from there.
+                        for each platform.
                         <br><br>
-                        <strong>Where to put the file:</strong> inside your Magento installation, at
-                        <code>var/aavirbhava/adsanalytics/adspend/&lt;platform&gt;.csv</code> &mdash;
-                        for example <code>var/aavirbhava/adsanalytics/adspend/google.csv</code> for
-                        Google, or <code>.../meta.csv</code> for Meta (Facebook/Instagram). Ask
-                        whoever manages your server/hosting to place it there if you do not have
-                        direct file access yourself. Currently only <b>Google</b> and <b>Meta</b> are
-                        supported this way; other platforms, or a platform with no file yet, simply
-                        show &quot;no data&quot; in the ROAS report rather than a zero.
+                        <strong>The easiest way:</strong> go to <b>Reports &gt; Ads Analytics</b> and
+                        use the <b>Ad Spend Data</b> upload section near the bottom of that page to
+                        upload a CSV file for each platform. Currently <b>Google</b> and <b>Meta</b>
+                        are supported; a platform with no file uploaded yet simply shows &quot;no
+                        data&quot; in the ROAS report rather than a zero.
                         <br><br>
-                        <strong>What the file should contain:</strong> a first row with the column
-                        names, then one row per day per campaign, like this:
+                        <strong>The file should contain:</strong> a first row with the column names,
+                        then one row per day per campaign, like this:
                         <br>
                         <code>date,campaign,spend</code><br>
                         <code>2026-09-19,spring_sale,42.50</code><br>
@@ -163,10 +165,11 @@
                         <code>date</code> is <code>YYYY-MM-DD</code>, <code>campaign</code> should
                         match the campaign name you already use in your ad tracking links, and
                         <code>spend</code> is a plain number in your store's currency (no currency
-                        symbol). A row with a mistake in it is skipped rather than breaking the
-                        whole file.
+                        symbol). A row with a mistake in it is skipped rather than rejecting the
+                        whole file, and uploading a new file replaces the previous one for that
+                        platform.
                         <br><br>
-                        This is a manual, once-in-a-while file update, not a live feed &mdash; nothing
+                        This is a manual, once-in-a-while update, not a live feed &mdash; nothing
                         updates it automatically. If you want your ad spend to update on its own
                         from Google Ads or Meta Ads, ask your developer; that can be added without
                         changing how this report itself works.

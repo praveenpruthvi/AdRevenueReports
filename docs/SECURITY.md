@@ -47,6 +47,13 @@ Three behaviours to be aware of when changing these settings:
 ## 9. Admin ACL
 Dedicated ACL resource for this module's admin menu/pages/config, independent of `Aavirbhava_SalesAnalytics`'s ACL — so access can be granted separately.
 
+**Ad-spend CSV upload** (`Controller\Adminhtml\AdSpend\Upload`) is gated on `Aavirbhava_AdsAnalytics::config`, not the dashboard's own resource — uploading spend data changes what the ROAS report shows, which is closer to "can change this module's configuration" than "can view its reports". `Block\Adminhtml\Dashboard::canManageAdSpendData()` checks the same resource before rendering the upload form at all, so an admin who cannot submit it never sees it.
+
+Upload validation, in order: PHP's own upload-error code; `is_uploaded_file()` on the temp path (refuses a forged path masquerading as an upload — the one check with no application-level fallback, since it is enforcing a fact about how the file arrived, not about its content); size capped at 5 MiB; `.csv` extension; then the file is parsed through `Model\AdSpendProvider\AdSpendCsvFile` (the same class the read path uses) and rejected outright if it yields zero valid rows, so a wrong-format upload cannot silently replace a platform's working spend data with an empty file. The destination path is built from the platform code the same safe-charset way `AdSpendCsvFile::pathFor()` already does for reads, and the actual write goes through `Filesystem\Directory\Write::writeFile()` on a relative path (which validates internally that the path cannot escape its own directory) rather than an absolute path built by hand.
+
+## 10. Secrets
+Any ad-spend provider API credentials (Phase 4 — Google Ads/Meta Ads APIs) must be stored via Magento's encrypted config backend (`Magento\Config\Model\Config\Backend\Encrypted`), never plain text in `system.xml` defaults or DB.
+
 ## 10. Secrets
 Any ad-spend provider API credentials (Phase 4 — Google Ads/Meta Ads APIs) must be stored via Magento's encrypted config backend (`Magento\Config\Model\Config\Backend\Encrypted`), never plain text in `system.xml` defaults or DB.
 
